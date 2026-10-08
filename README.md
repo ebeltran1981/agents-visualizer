@@ -47,6 +47,7 @@ The two numbers are the session cost and what it would cost if every agent ran o
 ## Notes
 
 - Usage is counted once per API message, because Claude Code repeats `usage` on every content-block line.
-- A subagent counts as **done** when its last message is text-only or it calls `SubagentHandback`. It shows **PASS** or **FAIL** when its final text contains those words in uppercase. It counts as **idle** after 45 s with no activity.
-- Transcripts don't log advisor calls, so the advisor card shows the checkpoint moments that can be detected instead: `EnterPlanMode`, the same tool error seen twice, and the main turn ending. Claude Code hooks (`SubagentStart`/`SubagentStop`/`PostToolUse`/`Stop`) could add precise events later.
+- A subagent counts as **done** when its last message is text-only or it calls `SubagentHandback`. It shows **PASS** or **FAIL** when the last line of its final message is exactly that word. It counts as **idle** after 45 s with no activity.
+- Advisor calls appear in transcripts as a `server_tool_use` block named `advisor`. Their tokens appear only in `usage.iterations` (type `advisor_message`, with the advisor's model), not in the top-level usage, so the dashboard adds them separately at the advisor's price.
+- The checkpoint pills are inferred. A real advisor call lights "before the plan" if no subagent has started yet, "same error twice" if a tool error just repeated, and "before done" if every subagent has finished. `EnterPlanMode`, repeated errors and turn ends also count.
 - The footer's command line is reconstructed from the transcript's model and effort.
