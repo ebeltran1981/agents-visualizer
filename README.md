@@ -2,9 +2,9 @@
 
 Live dashboard of one coding-agent session: the main agent, its advisor and its subagents, with the model each one runs, what it is doing, token use and cost. Pick the agent harness from a dropdown.
 
-![Four models, one session: an Opus 5.5 main agent with a Fable 5.1 advisor and 10 Haiku 4.5 and Sonnet 5.5 subagents](docs/demo.png)
+![Four models, one session: an Opus 5.5 main agent with a Fable 5.1 advisor and 10 Haiku 5.5 and Sonnet 5.5 subagents](docs/demo.png)
 
-*A real run: Opus 5.5 plans and reviews, Fable 5.1 advises at two checkpoints, and 10 subagents (Haiku 4.5 reads, Sonnet 5.5 edits) build a small library in 4m46s for $3.11.*
+*A real run: Opus 5.5 plans and reviews, Fable 5.1 advises three times, and 10 subagents (Haiku 5.5 reads and reviews, Sonnet 5.5 edits) build a small library in 3m54s for $2.99. The five Haiku 5.5 subagents cost $0.016 together.*
 
 It only reads the session files each harness already writes, and never writes into them.
 
