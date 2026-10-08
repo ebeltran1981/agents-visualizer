@@ -19,6 +19,8 @@ PORT=5000 node server.js
 
 Open http://localhost:4321. You can switch sessions with the picker in the top right.
 
+**Replay** is on by default for sessions that have been quiet for 60 s. It plays the backlog in timestamp order at 5x, 20x or 100x, or all at once with "instant", and caps idle gaps at 1 s. You can also set it in the URL, for example `?replay=1&speed=100&session=<path>`.
+
 ## Status line
 
 `statusline.js` reads Claude Code's status-line JSON on stdin and prints one line, for example:
