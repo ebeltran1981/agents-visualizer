@@ -439,7 +439,7 @@ async function pickHarness(id, session) {
   picker.disabled = !chosen;
   if (!chosen) {
     reset();
-    emptyMsg = `no ${harness.label} sessions in ${r.root}`;
+    emptyMsg = r.note ?? `no ${harness.label} sessions in ${r.root}`;
     picker.add(new Option(emptyMsg, ''));
     params.set('harness', harness.id); params.delete('session');
     return history.replaceState(null, '', '?' + params);

@@ -50,7 +50,7 @@ http.createServer((req, res) => {
   }
   if (url.pathname === '/api/sessions') {
     const sessions = harness.listSessions();
-    return json(res, { default: (harness === startHarness && startSession) || sessions[0]?.key, root: harness.root, sessions });
+    return json(res, { default: (harness === startHarness && startSession) || sessions[0]?.key, root: harness.root, note: harness.note, sessions });
   }
   if (url.pathname === '/events') {
     const key = url.searchParams.get('session');

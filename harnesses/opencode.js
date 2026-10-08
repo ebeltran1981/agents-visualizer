@@ -104,4 +104,7 @@ function watch(key, push, end) {
   return () => conn && close();
 }
 
-export default { id: 'opencode', label: 'opencode', bin: 'opencode', root: tilde(DB), listSessions, resolve, valid, watch };
+// Shown instead of "no sessions" when this Node can't read opencode's database at all.
+const note = DatabaseSync ? undefined : 'opencode needs Node 22.13 or later (node:sqlite)';
+
+export default { id: 'opencode', label: 'opencode', bin: 'opencode', root: tilde(DB), note, listSessions, resolve, valid, watch };
