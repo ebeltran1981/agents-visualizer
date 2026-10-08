@@ -42,6 +42,13 @@ CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn
 - **Finished sessions** replay by default (any session quiet for 60 s). Choose 5x, 20x or 100x, or "instant" to load everything at once. Untick "replay" to load without playback.
 - **URL parameters** make a view shareable or scriptable: `?session=<path>&replay=1&speed=20`.
 
+**On Windows**, the commands are the same in PowerShell, except environment variables, which use `$env:`. Session files are read from the same places under `%USERPROFILE%` (for example `%USERPROFILE%\.claude\projects`). So far the Windows support has only been checked with Windows-style paths on Linux, not on a Windows computer.
+
+```powershell
+$env:PORT=5000; node server.js
+$env:CLAUDE_CONFIG_DIR="D:\claude-config"; node server.js
+```
+
 What the dashboard shows:
 
 | Panel | Meaning |
@@ -64,7 +71,7 @@ The dashboard is most useful when a session mixes models. In the project you are
    ---
    name: explorer
    description: Read-only. Searches and reads the codebase and reports what it found.
-   model: claude-haiku-4-5
+   model: claude-haiku-5-5
    tools: Read, Grep, Glob
    ---
 
@@ -91,9 +98,13 @@ The two numbers are the session cost and what it would cost if every agent ran o
 { "statusLine": { "type": "command", "command": "node /path/to/agents-visualizer/statusline.js" } }
 ```
 
+On Windows, write the path with forward slashes, for example `node C:/Users/me/agents-visualizer/statusline.js`, so it needs no escaping in JSON.
+
 ## Prices
 
 Costs come from the `PRICES` table at the top of `aggregate.js`: Anthropic list prices in USD per 1M tokens (input, output, cache read, 5-minute cache write).
+
+Haiku 5.5 costs more for prompts over 100,000 tokens ($0.50 / $2.50 instead of $0.10 / $0.50). The dashboard prices each request by its own prompt size: input plus cache reads and writes.
 
 For your own rates or other models, copy `prices.local.example.json` to `prices.local.json` next to `server.js`. Git ignores that file, so company rates never reach the repo. Entries there take precedence over `PRICES`, and the dashboard and the status line both read it. Reload the page after editing it.
 
@@ -109,6 +120,7 @@ The example below uses placeholder rates; replace them with yours.
 
 - Keys match model IDs as they appear in the transcripts, by prefix.
 - `in` and `out` are required. `cacheRead` and `cacheWrite` default to `in`.
+- `long` sets the prices for requests whose prompt is over 100,000 tokens, with the same fields, as `PRICES` does for Haiku 5.5.
 - `label` changes the name on the cards, and `family` changes the name used in the header and footer.
 - If the file isn't valid JSON, the server logs why in its terminal and ignores it.
 

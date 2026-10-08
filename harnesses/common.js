@@ -6,10 +6,24 @@ import { StringDecoder } from 'node:string_decoder';
 
 // A harness counts as installed when its CLI is on PATH or its data folder exists. Checked on each call,
 // so a harness installed while the server runs shows up on the next page load.
+// On Windows the CLI is claude.exe or claude.cmd, so try each PATHEXT suffix.
+const EXTS = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : [''];
 export const installed = (bin, home) => () => fs.existsSync(home) || (process.env.PATH ?? '').split(path.delimiter)
-  .some(dir => { try { fs.accessSync(path.join(dir, bin), fs.constants.X_OK); return true; } catch { return false; } });
+  .some(dir => EXTS.some(ext => { try { fs.accessSync(path.join(dir, bin + ext), fs.constants.X_OK); return true; } catch { return false; } }));
 
 export const tilde = p => p?.startsWith(os.homedir()) ? '~' + p.slice(os.homedir().length) : p;
+
+// True when p is inside root. path.relative ignores case on Windows, unlike a startsWith check.
+export const inside = (root, p) => { const rel = path.relative(root, path.resolve(p)); return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel); };
+
+// The cwd a session file records, read from its first bytes. JSON.parse undoes escaping such as C:\\Users.
+export function cwdOf(file, prefix = '') {
+  const buf = Buffer.alloc(64 * 1024), fd = fs.openSync(file, 'r');
+  const head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0));
+  fs.closeSync(fd);
+  const raw = head.match(new RegExp(prefix + '"cwd":("(?:[^"\\\\]|\\\\.)*")'))?.[1];
+  try { return raw && tilde(JSON.parse(raw)); } catch { return undefined; }
+}
 
 // One line describing a tool call's input.
 export function summarize(x = {}) {

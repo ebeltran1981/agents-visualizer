@@ -2,7 +2,7 @@
 // <root>/<encoded cwd>/<ISO timestamp>_<id>.jsonl, appended one record per line.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde, every, installed } from './common.js';
+import { tail, summarize, verdictOf, tilde, every, installed, inside, cwdOf } from './common.js';
 
 // oh-my-pi subagents hand back structured data with yield; PASS/FAIL usually sits in its status or result field.
 const yieldVerdict = x => typeof x?.data === 'string' ? verdictOf(x.data)
@@ -44,12 +44,7 @@ export function slim(o, ctx) {
 }
 
 // The header (line 1 in pi, line 2 in oh-my-pi) holds the real cwd.
-function cwdOf(file) {
-  const buf = Buffer.alloc(16 * 1024), fd = fs.openSync(file, 'r');
-  const head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0));
-  fs.closeSync(fd);
-  return tilde(head.match(/"type":"session"[^\n]*?"cwd":"([^"]+)"/)?.[1]);
-}
+const headerCwd = file => cwdOf(file, '"type":"session"[^\\n]*?');
 
 export function piHarness({ id, label, bin, home, root, subagentsOf = () => [] }) {
   function listSessions(limit = 40) {
@@ -62,14 +57,14 @@ export function piHarness({ id, label, bin, home, root, subagentsOf = () => [] }
       for (const f of files.filter(f => f.endsWith('.jsonl'))) {
         const p = path.join(root, dir, f), st = fs.statSync(p);
         if (!st.size) continue;
-        out.push({ key: p, id: f.slice(f.indexOf('_') + 1, -6), cwd: cwdOf(p) ?? dir, mtime: st.mtimeMs, size: st.size });
+        out.push({ key: p, id: f.slice(f.indexOf('_') + 1, -6), cwd: headerCwd(p) ?? dir, mtime: st.mtimeMs, size: st.size });
       }
     }
     return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit);
   }
 
   const resolve = arg => arg.endsWith('.jsonl') ? path.resolve(arg) : listSessions(Infinity).find(s => s.id === arg)?.key;
-  const valid = key => !!key && path.resolve(key).startsWith(root + path.sep) && key.endsWith('.jsonl') && fs.existsSync(key);
+  const valid = key => !!key && inside(root, key) && key.endsWith('.jsonl') && fs.existsSync(key);
 
   // Same contract as harnesses/claude.js: push batches of { a, r } and { a, meta }; end() on a rewritten file.
   function watch(key, push, end) {

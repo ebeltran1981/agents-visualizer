@@ -164,9 +164,9 @@ const cssVar = (name, el = document.documentElement) => getComputedStyle(el).get
 const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
 const setHTML = (el, v) => { if (el._html !== v) el.innerHTML = el._html = v; };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
-const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
+const basename = p => p?.split(/[\\/]/).filter(Boolean).pop() ?? '';
 const rate = m => { if (!m) return ''; const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
-const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · add it to prices.local.json'; };
+const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M${p.long ? ', prompts ≤100K' : ''}` : 'no price · add it to prices.local.json'; };
 const tint = f => CLAUDE_FAMILIES.includes(f) ? f : 'other';  // non-Claude models get a neutral colour
 const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events

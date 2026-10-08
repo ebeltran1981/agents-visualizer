@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { summarize, verdictOf, tilde, every, installed } from './common.js';
 
 let DatabaseSync;
@@ -16,7 +17,8 @@ const DB = process.env.OPENCODE_DB || path.join(process.env.XDG_DATA_HOME || pat
 function open() {
   if (!DatabaseSync || !fs.existsSync(DB)) return null;
   const live = fs.existsSync(DB + '-wal');
-  return { live, db: new DatabaseSync(live ? DB : `file:${DB}?immutable=1`, { readOnly: true }) };
+  // pathToFileURL gives file:///C:/... on Windows, the URI form SQLite expects
+  return { live, db: new DatabaseSync(live ? DB : `${pathToFileURL(DB).href}?immutable=1`, { readOnly: true }) };
 }
 
 const rows = (sql, ...args) => { const c = open(); if (!c) return []; try { return c.db.prepare(sql).all(...args); } finally { c.db.close(); } };
