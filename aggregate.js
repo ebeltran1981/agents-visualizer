@@ -49,6 +49,7 @@ export function slim(o) {
   if (o.type === 'assistant' && m) {
     const u = m.usage ?? {}, cw1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
     const content = Array.isArray(m.content) ? m.content : [];
+    const text = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
     return {
       t: 'a', ts: o.timestamp, id: m.id, model: m.model, effort: o.effort, advisor: o.advisorModel, cwd: o.cwd,
       u: { in: u.input_tokens ?? 0, out: u.output_tokens ?? 0, cr: u.cache_read_input_tokens ?? 0,
@@ -58,7 +59,8 @@ export function slim(o) {
         u: { in: i.input_tokens ?? 0, out: i.output_tokens ?? 0, cr: i.cache_read_input_tokens ?? 0, cw: i.cache_creation_input_tokens ?? 0, cw1h: 0 } })),
       tools: content.filter(c => c.type === 'tool_use')
         .map(c => ({ id: c.id, name: c.name, input: summarize(c.input), file: c.input?.file_path ?? c.input?.notebook_path })),
-      text: content.filter(c => c.type === 'text').map(c => c.text).join('\n').slice(0, 600) || undefined,
+      text: text.slice(0, 600) || undefined,
+      verdict: text.trim().split('\n').pop().replace(/[*`_#\s]/g, '').match(/^(PASS|FAIL)$/)?.[1],  // last line only
     };
   }
   if (o.type === 'user' && m) {
@@ -74,7 +76,7 @@ const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
 const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
-  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', adv: { model: '', u: zero(), calls: 0, ts: 0 } };
+  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', repeatPending: false, adv: { model: '', u: zero(), calls: 0, ts: 0, kind: null, lastIn: 0 } };
 }
 
 function agentOf(s, id) {
@@ -109,7 +111,12 @@ export function ingest(s, id, r) {
     if (prev) { addU(a.u, prev.u, -1); prev.adv.forEach(x => addU(s.adv.u, x.u, -1)); s.adv.calls -= prev.adv.length; }
     addU(a.u, r.u); r.adv.forEach(x => addU(s.adv.u, x.u)); s.adv.calls += r.adv.length;
     for (const x of r.adv.slice(prev?.adv.length ?? 0)) {
-      Object.assign(s.adv, { model: x.model, ts: a.lastTs });
+      // map a real call to the checkpoint it most likely is
+      const subs = [...s.agents.values()].filter(b => b.id !== 'main' && b.lastTs);  // spawned, not just announced
+      const kind = !subs.length ? 'plan' : s.repeatPending ? 'repeat' : subs.every(b => b.done || b.lastKind === 'text') ? 'done' : null;
+      if (kind) check(kind);
+      s.repeatPending = false;
+      Object.assign(s.adv, { model: x.model, ts: a.lastTs, kind, lastIn: x.u.in + x.u.cr });
       row('advisor', `asks ${shortModel(x.model)} · it reads ${Math.round((x.u.in + x.u.cr) / 1000)}k tokens`, family(x.model));
     }
     a.usage.set(r.id, r);
@@ -118,18 +125,18 @@ export function ingest(s, id, r) {
       if (t.file) a.files.add(t.file);
       if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t.name)) a.writes++;
       if (t.name === 'EnterPlanMode') check('plan');
-      if (t.name === 'SubagentHandback') { a.done = true; a.final = t.input; }
+      if (t.name === 'SubagentHandback') { a.done = true; a.final = t.input; a.verdict = undefined; }
       row(t.name, t.input, id === 'main' ? '' : `${family(a.model)} · ${a.effort}`);
     }
     if (!r.tools.length) {
       a.lastKind = r.text ? 'text' : 'thinking';
-      if (r.text) { a.final = r.text; row('says', r.text.split('\n').find(Boolean)); }
+      if (r.text) { a.final = r.text; a.verdict = r.verdict; row('says', r.text.split('\n').find(Boolean)); }
     }
   } else if (r.t === 'r') {
     a.lastKind = 'result';
     for (const x of r.results.filter(x => x.err)) {
       a.errors++; row('error', x.msg, s.errs.has(x.msg) ? 'again' : '', true);
-      if (s.errs.has(x.msg)) check('repeat');
+      if (s.errs.has(x.msg)) { check('repeat'); s.repeatPending = true; }
       s.errs.add(x.msg);
     }
   } else if (r.t === 'p') {
@@ -143,9 +150,7 @@ export function ingest(s, id, r) {
 // idle | working | done | PASS | FAIL
 export function stateOf(a, now = Date.now()) {
   if (a.id !== 'main' && (a.done || a.lastKind === 'text')) {
-    if (/\bFAIL(ED|ING|S)?\b/.test(a.final)) return 'FAIL';
-    if (/\bPASS(ED|ES)?\b/.test(a.final)) return 'PASS';
-    return 'done';
+    return a.verdict ?? 'done';
   }
   return a.lastKind !== 'text' && now - a.lastTs < IDLE_MS ? 'working' : 'idle';
 }

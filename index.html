@@ -257,6 +257,7 @@ function updateCard(parent, a, now) {
 }
 
 const clock = () => replaying ? vt : Date.now();
+const ASK_TEXT = { plan: 'before the plan', repeat: 'after the same error twice', done: 'before "done"' };
 const CHECK_TEXT = { plan: 'plan checkpoint · before the plan', repeat: 'same error twice · would ask the advisor', done: 'turn ended · before "done"' };
 
 function render() {
@@ -283,7 +284,7 @@ function render() {
   }
   // the latest of an actual advisor call or an inferred checkpoint drives the status line
   const called = call.calls && call.ts >= (lc?.ts ?? 0);
-  setHTML($('advStatus'), called ? `<i>»</i> asked at ${time(call.ts)} · read the full transcript`
+  setHTML($('advStatus'), called ? `<i>»</i> ${esc(family(s.main?.model))} asked ${ASK_TEXT[call.kind] ?? 'mid-run'} · read ${fmtK(call.lastIn)} tokens`
     : lc ? `<i>»</i> ${CHECK_TEXT[lc.kind]}` : '<span class="dim">no checkpoint yet</span>');
   const recent = now - Math.max(lc?.ts ?? 0, call.ts) < 60_000;
   setText($('advQuiet'), recent ? (called ? '● reviewing' : '● checkpoint reached') : `○ quiet until ${family(s.main?.model)} asks`);
