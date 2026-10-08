@@ -152,7 +152,7 @@
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, priced, readTokens } from './aggregate.js';
 
 const $ = id => document.getElementById(id);
 const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
@@ -234,7 +234,7 @@ function updateCard(parent, a, now) {
   el.className = `card ${tint(family(a.model))}`;
   setText(k.model, a.model ? shortModel(a.model) : 'starting…');
   setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
-  setText(k.price, rate(a.model));
+  setText(k.price, priceFor(a.model) ? rate(a.model) : a.paid.n ? 'reported cost' : rate(a.model));
   setText(k.state, st);
   setText(k.desc, a.desc || (a.id === 'main' ? `leads the session in ${basename(state.cwd)}` : ''));
   setText(k.effort, a.effort || '—');
@@ -245,7 +245,7 @@ function updateCard(parent, a, now) {
   tween(k.tools, a.tools, fmtN);
   tween(k.out, a.u.out, fmtK);
   tween(k.in, readTokens(a.u), fmtK);
-  tween(k.cost, cost(a.model, a.u), fmt$);
+  tween(k.cost, agentCost(a), fmt$);
   const act = ['done', 'PASS', 'FAIL'].includes(st) ? `<span class="dim">${esc(a.final.split('\n').find(Boolean))}</span>`
     : a.activity ? `<i>${sym}</i> ${esc(v)} <span class="dim">${esc(a.activity.input)}</span>` : '<span class="dim">waiting…</span>';
   if (el._act !== act) {
@@ -297,9 +297,9 @@ function render() {
 
   const max = Math.max(s.readCost, s.readCostIfMain) || 1;
   setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>${s.unpricedSubs ? ` · ${s.unpricedSubs} unpriced left out` : ''}`);
-  const subModels = [...new Set(s.subs.map(a => a.model).filter(priceFor))];
+  const subModels = [...new Set(s.subs.filter(priced).map(a => a.model))];
   setHTML($('mainLabel'), `on ${esc(shortModel(s.mainModel))}<small>${esc(readRate(s.mainModel))}</small>`);
-  setHTML($('actualLabel'), `on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? readRate(subModels[0]) : subModels.length ? 'mixed rates' : '')}</small>`);
+  setHTML($('actualLabel'), `on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? (priceFor(subModels[0]) ? readRate(subModels[0]) : `cost reported by ${harness.label}`) : subModels.length ? 'mixed rates' : '')}</small>`);
   $('actualBar').style.width = (100 * s.readCost / max) + '%';
   $('mainBar').style.width = (100 * s.readCostIfMain / max) + '%';
   tween($('actualCost'), s.readCost, fmt$);
@@ -360,7 +360,7 @@ function apply(events) {
     if (metaStash[a]) { ingestMeta(state, a, metaStash[a]); delete metaStash[a]; }  // spawn card on first record
     rows.push(...ingest(state, a, r));
     lastRecord = Math.max(lastRecord, Date.parse(r.ts));
-    delegated ||= a !== 'main' || r.tools?.some(t => t.name === 'Agent' || t.name === 'Task');
+    delegated ||= a !== 'main' || r.tools?.some(t => /^(agent|task)$/i.test(t.name));
   }
   if (!events.length) return;
   appendLog(rows);
@@ -403,7 +403,8 @@ function connect(session) {
   let first = true;
   const source = es = new EventSource(`/events?harness=${harness.id}&session=${encodeURIComponent(session)}`);
   source.onmessage = e => {
-    for (const ev of JSON.parse(e.data)) ev.meta ? metaStash[ev.a] = ev.meta : queue.push(ev);
+    // metadata can arrive after the agent's first record (oh-my-pi names subagents when they finish)
+    for (const ev of JSON.parse(e.data)) !ev.meta ? queue.push(ev) : state.agents.has(ev.a) ? (ingestMeta(state, ev.a, ev.meta), dirty = true) : metaStash[ev.a] = ev.meta;
     if (first && queue.length && $('replay').checked && speed > 0) {
       replaying = true;
       played = 0;

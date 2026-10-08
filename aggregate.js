@@ -40,6 +40,12 @@ export function cost(model, u) {
   return c == null ? null : c + (u.out * priceFor(model).out) / 1e6;
 }
 
+// Your local prices first, then the cost the harness reported (pi and its forks record it), then the list price.
+const usesPaid = a => a.paid.n > 0 && !local(a.model);
+export const agentCost = a => usesPaid(a) ? a.paid.total : cost(a.model, a.u);
+const agentInputCost = a => usesPaid(a) ? a.paid.in : inputCost(a.model, a.u);
+export const priced = a => a.paid.n > 0 || !!priceFor(a.model);
+
 export const readTokens = u => u.in + u.cr + u.cw + u.cw1h;
 export const CLAUDE_FAMILIES = ['fable', 'mythos', 'opus', 'sonnet', 'haiku'];
 // Claude models group by family (opus, sonnet…); any other model stands for itself.
@@ -60,7 +66,7 @@ export function createState() {
 function agentOf(s, id) {
   if (!s.agents.has(id)) s.agents.set(id, {
     id, n: s.agents.size, type: id === 'main' ? 'main' : 'agent', desc: '', model: '', effort: '', advisor: '',
-    u: zero(), usage: new Map(), files: new Set(), tools: 0, writes: 0, errors: 0, lastKind: '', activity: null, final: '', lastTs: 0,
+    u: zero(), paid: { total: 0, in: 0, n: 0 }, usage: new Map(), files: new Set(), tools: 0, writes: 0, errors: 0, lastKind: '', activity: null, final: '', lastTs: 0,
   });
   return s.agents.get(id);
 }
@@ -87,6 +93,8 @@ export function ingest(s, id, r) {
     // One API message is split over several lines that repeat its usage: count it once.
     const prev = a.usage.get(r.id);
     if (prev) { addU(a.u, prev.u, -1); prev.adv.forEach(x => addU(s.adv.u, x.u, -1)); s.adv.calls -= prev.adv.length; }
+    if (prev?.cost) addU(a.paid, { ...prev.cost, n: 1 }, -1);
+    if (r.cost) addU(a.paid, { ...r.cost, n: 1 });
     addU(a.u, r.u); r.adv.forEach(x => addU(s.adv.u, x.u)); s.adv.calls += r.adv.length;
     for (const x of r.adv.slice(prev?.adv.length ?? 0)) {
       // map a real call to the checkpoint it most likely is
@@ -101,9 +109,9 @@ export function ingest(s, id, r) {
     for (const t of r.tools) {
       a.tools++; a.lastKind = 'tool'; a.activity = t;
       if (t.file) a.files.add(t.file);
-      if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t.name)) a.writes++;
+      if (/^(edit|write|multiedit|notebookedit)$/i.test(t.name)) a.writes++;
       if (t.name === 'EnterPlanMode') check('plan');
-      if (t.name === 'SubagentHandback') { a.done = true; a.final = t.input; a.verdict = undefined; }
+      if (/^(SubagentHandback|yield)$/.test(t.name)) { a.done = true; a.final = t.input; a.verdict = undefined; }  // a subagent handing back its result
       row(t.name, t.input, id === 'main' ? '' : `${family(a.model)} · ${a.effort}`);
     }
     if (!r.tools.length) {
@@ -133,8 +141,9 @@ export function stateOf(a, now = Date.now()) {
   return a.lastKind !== 'text' && now - a.lastTs < IDLE_MS ? 'working' : 'idle';
 }
 
-const VERBS = [[/^(Read|Grep|Glob)$/, '▸', 'reading'], [/^(Edit|Write|MultiEdit|NotebookEdit)$/, '✎', 'editing'],
-  [/^Bash$/, '$', 'running'], [/PlanMode/, '●', 'plan'], [/^(Agent|Task)$/, '⇢', 'delegating'], [/^Web/, '↯', 'browsing']];
+// Tool names differ in case across harnesses (Read in Claude Code, read in pi).
+const VERBS = [[/^(read|grep|glob|find|ls)$/i, '▸', 'reading'], [/^(edit|write|multiedit|notebookedit)$/i, '✎', 'editing'],
+  [/^bash$/i, '$', 'running'], [/PlanMode/, '●', 'plan'], [/^(agent|task)$/i, '⇢', 'delegating'], [/^web/i, '↯', 'browsing']];
 
 export function verb(a) {
   if (a.lastKind === 'thinking') return ['●', 'thinking'];
@@ -147,17 +156,17 @@ export function summary(s) {
   const mainModel = main?.model, advModel = s.adv.model || main?.advisor, mainPriced = !!priceFor(mainModel);
   const sum = (list, f) => list.reduce((t, a) => t + (f(a) ?? 0), 0);
   // Agents on unpriced models are left out of both sides of every comparison, and the totals are marked partial.
-  const pricedAll = all.filter(a => priceFor(a.model)), pricedSubs = subs.filter(a => priceFor(a.model));
+  const pricedAll = all.filter(priced), pricedSubs = subs.filter(priced);
   const advU = priceFor(advModel) ? s.adv.u : null;
-  const unpriced = [...new Set(all.map(a => a.model).concat(s.adv.calls ? advModel : []).filter(m => m && !priceFor(m)))];
+  const unpriced = [...new Set(all.filter(a => !priced(a)).map(a => a.model).concat(s.adv.calls ? advModel : []).filter(m => m && !priceFor(m)))];
   return {
     main, subs, mainModel, advModel, unpriced, partial: unpriced.length > 0, unpricedSubs: subs.length - pricedSubs.length,
     models: [...new Set(all.map(a => a.model).concat(advModel ?? []).filter(Boolean))],
     advCost: cost(advModel, s.adv.u),
-    cost: sum(pricedAll, a => cost(a.model, a.u)) + (advU ? cost(advModel, advU) : 0),
+    cost: sum(pricedAll, agentCost) + (advU ? cost(advModel, advU) : 0),
     costIfMain: mainPriced ? sum(pricedAll, a => cost(mainModel, a.u)) + (advU ? cost(mainModel, advU) : 0) : null,
     readTokens: sum(pricedSubs, a => readTokens(a.u)),
-    readCost: sum(pricedSubs, a => inputCost(a.model, a.u)),
+    readCost: sum(pricedSubs, agentInputCost),
     readCostIfMain: mainPriced ? sum(pricedSubs, a => inputCost(mainModel, a.u)) : null,
   };
 }

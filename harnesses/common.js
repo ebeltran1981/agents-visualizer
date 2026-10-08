@@ -15,15 +15,17 @@ export function summarize(x = {}) {
 // PASS or FAIL, only when it is the message's last line.
 export const verdictOf = text => text.trim().split('\n').pop().replace(/[*`_#\s]/g, '').match(/^(PASS|FAIL)$/)?.[1];
 
-// Returns a poll() that reads only the bytes appended since the last call. A file that shrinks calls onShrink
-// instead of being replayed, so nothing is counted twice.
+// Returns a poll() that reads only the bytes appended since the last call. A file that shrinks or is replaced
+// (oh-my-pi rewrites via rename) calls onShrink instead of being replayed, so nothing is counted twice.
 export function tail(file, onLine, onShrink) {
-  let pos = 0, rest = '';
+  let pos = 0, rest = '', ino;
   const dec = new StringDecoder('utf8');
   return () => {
-    let size;
-    try { size = fs.statSync(file).size; } catch { return; }
-    if (size < pos) return onShrink();
+    let st;
+    try { st = fs.statSync(file); } catch { return; }
+    if (st.size < pos || (ino && st.ino !== ino)) return onShrink();
+    ino = st.ino;
+    const size = st.size;
     if (size === pos) return;
     const buf = Buffer.alloc(size - pos), fd = fs.openSync(file, 'r');
     fs.readSync(fd, buf, 0, buf.length, pos);
