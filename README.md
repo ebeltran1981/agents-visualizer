@@ -12,6 +12,7 @@ It only reads the session files each harness already writes, and never writes in
 |---|---|
 | claude code | `~/.claude/projects/<project>/<sessionId>.jsonl`, with subagents in `<sessionId>/subagents/agent-<id>.jsonl` and `.meta.json` |
 | oh-my-pi | `~/.omp/agent/sessions/<cwd>/<timestamp>_<id>.jsonl`, with subagents in the same-named folder as `<Name>.jsonl` |
+| pi | `~/.pi/agent/sessions/--<cwd>--/<timestamp>_<id>.jsonl` (or `$PI_CODING_AGENT_DIR/sessions`); pi has no built-in subagents |
 
 ## Setup
 
@@ -29,7 +30,7 @@ Start the server, then open http://localhost:4321.
 
 ```sh
 node server.js                       # opens the most recently modified session
-node server.js --harness omp         # starts on another harness: claude (default) or omp
+node server.js --harness omp         # starts on another harness: claude (default), omp or pi
 node server.js --session <id|path>   # opens a specific session
 PORT=5000 node server.js             # uses another port
 CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn't in ~/.claude
@@ -139,4 +140,5 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 - The checkpoint pills are inferred. A real advisor call lights "before the plan" if no subagent has started yet, "same error twice" if a tool error just repeated, and "before done" if every subagent has finished. `EnterPlanMode`, repeated errors and turn ends also count.
 - The footer's command line is reconstructed from the transcript's model and effort.
 - **oh-my-pi** records the cost of each message itself. The dashboard uses that unless `prices.local.json` has the model. Subagents are named after their file (for example "BackendArch") and get their agent type (for example "scout") once the parent's `task` call returns. They count as done when they call `yield`. Not yet counted: the small cost of omp's automatic thinking-level judge. An `__advisor.jsonl` transcript shows up as an "advisor" subagent card; that layout is untested because no advisor run exists on this machine.
+- **pi** uses the same parser as oh-my-pi. Sessions saved with `--session-dir` or a custom `sessionDir` setting aren't listed. The pi adapter was built from pi 1.1.0's source and tested on a converted oh-my-pi session, not yet on a real pi session.
 - If the server restarts or a session file is rewritten, the page reconnects and rebuilds from scratch, so nothing is counted twice.

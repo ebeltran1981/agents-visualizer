@@ -6,8 +6,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import claude from './harnesses/claude.js';
 import omp from './harnesses/omp.js';
+import pi from './harnesses/pi.js';
 
-const HARNESSES = Object.fromEntries([claude, omp].map(h => [h.id, h]));
+const HARNESSES = Object.fromEntries([claude, omp, pi].map(h => [h.id, h]));
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.PORT || 4321);
 const LOCAL_PRICES = path.join(HERE, 'prices.local.json');
