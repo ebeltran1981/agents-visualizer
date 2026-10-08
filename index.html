@@ -278,7 +278,7 @@ function render() {
   const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv;
   $('advisor').className = `card ${tint(family(adv))}`;
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
-  setText($('advPrice'), adv ? rate(adv) : '');
+  setText($('advPrice'), !adv ? '' : priceFor(adv) ? rate(adv) : state.adv.paid.n ? 'reported cost' : rate(adv));
   for (const [id, kind] of [['ckPlan', 'plan'], ['ckRepeat', 'repeat'], ['ckDone', 'done']]) {
     const el = $(id), on = c[kind] > 0;
     if (on !== el.classList.contains('on')) { el.classList.toggle('on', on); if (on) pop(el); }
@@ -313,7 +313,7 @@ function render() {
   setText($('unpriced'), s.partial ? `· no price for ${s.unpriced.join(', ')}: add them to prices.local.json` : '');
   setText($('logCwd'), basename(state.cwd));
 
-  const subFams = [...new Set(s.subs.filter(a => priceFor(a.model)).map(a => family(a.model)))].join(' + ');  // matches readTokens
+  const subFams = [...new Set(s.readSubs.map(a => family(a.model)))].join(' + ');  // the agents readTokens counts
   $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ ${esc(harness.bin)} --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
   $('cmd').title = 'reconstructed from the transcript';
   const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');

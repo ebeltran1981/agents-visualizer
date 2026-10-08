@@ -58,12 +58,14 @@ export function shortModel(m) {
 }
 
 const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
+const paidOf = c => ({ ...c, n: 1, inN: c.in == null ? 0 : 1 });
+
 // Retried errors differ only in a request id, so compare them without it.
 const errKey = msg => String(msg).replace(/\(ref: [^)]*\)|req_\w+/g, '');
 const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
-  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', repeatPending: false, adv: { model: '', u: zero(), calls: 0, ts: 0, kind: null, lastIn: 0 } };
+  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', repeatPending: false, adv: { model: '', u: zero(), paid: { total: 0, in: 0, n: 0, inN: 0 }, calls: 0, ts: 0, kind: null, lastIn: 0 } };
 }
 
 function agentOf(s, id) {
@@ -74,7 +76,7 @@ function agentOf(s, id) {
   return s.agents.get(id);
 }
 
-export const label = a => a.id === 'main' ? 'main' : `${a.type}#${a.n}`;
+export const label = a => a.id === 'main' ? 'main' : a.type === 'advisor' ? 'advisor' : `${a.type}#${a.n}`;
 
 export function ingestMeta(s, id, meta) {
   const a = agentOf(s, id);
@@ -95,6 +97,29 @@ export function ingest(s, id, r) {
   };
   a.lastTs = Date.parse(r.ts) || a.lastTs;
   if (r.cwd && id === 'main') s.cwd = r.cwd;
+  // Map an advisor call to the checkpoint it most likely is.
+  const advisorCall = (model, lastIn) => {
+    const subs = [...s.agents.values()].filter(b => b.id !== 'main' && b.type !== 'advisor' && b.lastTs);  // spawned, not just announced
+    const kind = !subs.length ? 'plan' : s.repeatPending ? 'repeat' : subs.every(b => b.done || b.lastKind === 'text') ? 'done' : null;
+    if (kind) check(kind);
+    s.repeatPending = false;
+    Object.assign(s.adv, { model, ts: a.lastTs, kind, lastIn });
+  };
+
+  // oh-my-pi logs its advisor as its own transcript; it feeds the advisor panel, one call per review it finishes.
+  if (a.type === 'advisor') {
+    if (r.t !== 'a' || !r.model) return rows;
+    const prev = a.usage.get(r.id);
+    if (prev) { addU(s.adv.u, prev.u, -1); if (prev.cost) addU(s.adv.paid, paidOf(prev.cost), -1); }
+    addU(s.adv.u, r.u); if (r.cost) addU(s.adv.paid, paidOf(r.cost));
+    a.usage.set(r.id, r);
+    if (!prev && r.text && !r.tools.length) {
+      s.adv.calls++;
+      advisorCall(r.model, r.u.in + r.u.cr);
+      row('advisor', r.text.split('\n').find(Boolean), family(r.model));
+    }
+    return rows;
+  }
 
   if (r.t === 'a') {
     if (!r.model || r.model.startsWith('<')) return rows;  // synthetic messages
@@ -102,17 +127,11 @@ export function ingest(s, id, r) {
     // One API message is split over several lines that repeat its usage: count it once.
     const prev = a.usage.get(r.id);
     if (prev) { addU(a.u, prev.u, -1); prev.adv.forEach(x => addU(s.adv.u, x.u, -1)); s.adv.calls -= prev.adv.length; }
-    const paidOf = c => ({ ...c, n: 1, inN: c.in == null ? 0 : 1 });
     if (prev?.cost) addU(a.paid, paidOf(prev.cost), -1);
     if (r.cost) addU(a.paid, paidOf(r.cost));
     addU(a.u, r.u); r.adv.forEach(x => addU(s.adv.u, x.u)); s.adv.calls += r.adv.length;
     for (const x of r.adv.slice(prev?.adv.length ?? 0)) {
-      // map a real call to the checkpoint it most likely is
-      const subs = [...s.agents.values()].filter(b => b.id !== 'main' && b.lastTs);  // spawned, not just announced
-      const kind = !subs.length ? 'plan' : s.repeatPending ? 'repeat' : subs.every(b => b.done || b.lastKind === 'text') ? 'done' : null;
-      if (kind) check(kind);
-      s.repeatPending = false;
-      Object.assign(s.adv, { model: x.model, ts: a.lastTs, kind, lastIn: x.u.in + x.u.cr });
+      advisorCall(x.model, x.u.in + x.u.cr);
       row('advisor', `asks ${shortModel(x.model)} · it reads ${Math.round((x.u.in + x.u.cr) / 1000)}k tokens`, family(x.model));
     }
     a.usage.set(r.id, r);
@@ -160,19 +179,19 @@ export function verb(a) {
 }
 
 export function summary(s) {
-  const all = [...s.agents.values()], main = s.agents.get('main'), subs = all.filter(a => a.id !== 'main');
+  const all = [...s.agents.values()].filter(a => a.type !== 'advisor'), main = s.agents.get('main'), subs = all.filter(a => a.id !== 'main');
   const mainModel = main?.model, advModel = s.adv.model || main?.advisor, mainPriced = !!priceFor(mainModel);
   const sum = (list, f) => list.reduce((t, a) => t + (f(a) ?? 0), 0);
   // Agents on unpriced models are left out of both sides of every comparison, and the totals are marked partial.
   const pricedAll = all.filter(priced), pricedSubs = subs.filter(a => agentInputCost(a) != null);  // the read bill needs input cost
-  const advU = priceFor(advModel) ? s.adv.u : null;
-  const unpriced = [...new Set(all.filter(a => !priced(a)).map(a => a.model).concat(s.adv.calls ? advModel : []).filter(m => m && !priceFor(m)))];
+  const advCost = s.adv.paid.n && !local(advModel) ? s.adv.paid.total : cost(advModel, s.adv.u);  // reported cost first, as for agents
+  const unpriced = [...new Set(all.filter(a => !priced(a)).map(a => a.model).concat(s.adv.calls && advCost == null ? advModel : []).filter(Boolean))];
   return {
     main, subs, mainModel, advModel, unpriced, partial: unpriced.length > 0, readSubs: pricedSubs, unpricedSubs: subs.length - pricedSubs.length,
     models: [...new Set(all.map(a => a.model).concat(advModel ?? []).filter(Boolean))],
-    advCost: cost(advModel, s.adv.u),
-    cost: sum(pricedAll, agentCost) + (advU ? cost(advModel, advU) : 0),
-    costIfMain: mainPriced ? sum(pricedAll, a => cost(mainModel, a.u)) + (advU ? cost(mainModel, advU) : 0) : null,
+    advCost,
+    cost: sum(pricedAll, agentCost) + (advCost ?? 0),
+    costIfMain: mainPriced ? sum(pricedAll, a => cost(mainModel, a.u)) + (advCost != null ? cost(mainModel, s.adv.u) : 0) : null,
     readTokens: sum(pricedSubs, a => readTokens(a.u)),
     readCost: sum(pricedSubs, agentInputCost),
     readCostIfMain: mainPriced ? sum(pricedSubs, a => inputCost(mainModel, a.u)) : null,
