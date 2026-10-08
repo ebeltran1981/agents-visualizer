@@ -208,7 +208,7 @@ function updateCard(parent, a, now) {
     if (!fresh) { flash(el); k.act.animate([{ backgroundColor: 'rgba(182,243,106,.22)', offset: 0 }], { duration: 600 }); }
   }
   if (el.dataset.state !== st) {
-    if (!fresh) { flash(el, st); pop(k.state); }
+    if (!fresh && st !== 'idle') { flash(el, st); pop(k.state); }
     el.dataset.state = st;
   }
 }
