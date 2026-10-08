@@ -33,7 +33,7 @@ export function cost(model, u) {
 
 export const readTokens = u => u.in + u.cr + u.cw + u.cw1h;
 export const family = m => m?.split('-')[1] ?? '?';
-export const shortModel = m => m?.replace(/^claude-/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') ?? '?';
+export const shortModel = m => m?.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') ?? '?';
 
 function summarize(x = {}) {
   const s = x.command ?? x.message ?? x.file_path ?? x.notebook_path ?? x.pattern ?? x.description ?? x.url ?? x.query
