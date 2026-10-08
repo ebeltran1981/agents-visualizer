@@ -29,6 +29,7 @@ Start the server, then open http://localhost:4321.
 node server.js                       # opens the most recently modified session
 node server.js --session <id|path>   # opens a specific session
 PORT=5000 node server.js             # uses another port
+CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn't in ~/.claude
 ```
 
 - **Pick a session** with the dropdown in the top right. It lists the 40 most recent sessions on this computer, labelled by project folder and session id.
@@ -87,7 +88,34 @@ The two numbers are the session cost and what it would cost if every agent ran o
 
 ## Prices
 
-Costs come from the `PRICES` table at the top of `aggregate.js`, in USD per 1M tokens (input, output, cache read, 5-minute cache write). A model missing from the table shows `?` instead of a guessed price; add a row to fix it.
+Costs come from the `PRICES` table at the top of `aggregate.js`: Anthropic list prices in USD per 1M tokens (input, output, cache read, 5-minute cache write).
+
+For your own rates or other models, copy `prices.local.example.json` to `prices.local.json` next to `server.js`. Git ignores that file, so company rates never reach the repo. Entries there take precedence over `PRICES`, and the dashboard and the status line both read it. Reload the page after editing it.
+
+The example below uses placeholder rates; replace them with yours.
+
+```json
+{
+  "company-large": { "in": 3, "out": 15, "label": "large", "family": "large" },
+  "company-small": { "in": 0.5, "out": 2, "cacheRead": 0.05 },
+  "claude-opus-5-5": { "in": 3.6, "out": 18, "cacheRead": 0.18, "cacheWrite": 4.5 }
+}
+```
+
+- Keys match model IDs as they appear in the transcripts, by prefix.
+- `in` and `out` are required. `cacheRead` and `cacheWrite` default to `in`.
+- `label` changes the name on the cards, and `family` changes the name used in the header and footer.
+- If the file isn't valid JSON, the server logs why in its terminal and ignores it.
+
+A model with no price shows `?`. Its tokens are left out of both sides of every cost comparison, and the session total shows as `≥ $…` so you know it's incomplete.
+
+## Company gateways and non-Claude models
+
+The dashboard reads the transcripts Claude Code writes on your computer, so it works the same whether Claude Code talks to Anthropic directly or through a company gateway.
+
+- **Provider prefixes and suffixes are stripped** before matching prices and names, so `us.anthropic.claude-opus-5-5-v1:0` and `claude-haiku-4-5@20251001` are recognised as Opus 5.5 and Haiku 4.5.
+- **Non-Claude models** appear under their own name (for example "gpt-5 edits"), in a neutral colour, and need an entry in `prices.local.json` to be priced.
+- **The advisor is a server-side Anthropic tool.** Without an advisor, the card reads "no advisor" and counts 0 calls, but the checkpoint pills still light from plan mode, repeated errors and turn ends. Whether the advisor works through your gateway depends on its backend.
 
 ## Files
 
@@ -95,6 +123,7 @@ Costs come from the `PRICES` table at the top of `aggregate.js`, in USD per 1M t
 |---|---|
 | `server.js` | Tails the transcripts and pushes slimmed records over SSE (`/events`). Also serves `/api/sessions`. |
 | `aggregate.js` | Shared parsing, aggregation and the price table. The browser and `statusline.js` both use it. |
+| `prices.local.example.json` | Template for your own rates and model names; copy it to `prices.local.json`. |
 | `index.html` | The dashboard, written in vanilla JS and CSS. |
 | `statusline.js` | The one-line status line. |
 

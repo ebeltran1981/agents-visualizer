@@ -1,7 +1,7 @@
 // Shared transcript parsing + aggregation. Used by server.js (slim), index.html and statusline.js.
 
 // USD per 1M tokens. cacheWrite = 5-minute TTL write; 1-hour writes are billed at 2x input.
-// Add a row for any new model; unknown models show "?" instead of a guessed price.
+// Unknown models show "?" instead of a guessed price; add your own in prices.local.json.
 export const PRICES = {
   'claude-fable-5-1':  { in: 10, out: 50, cacheRead: 0.25, cacheWrite: 12.5 },
   'claude-fable-5':    { in: 10, out: 50, cacheRead: 1.00, cacheWrite: 12.5 },
@@ -16,10 +16,19 @@ export const PRICES = {
 export const EFFORT = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
 const IDLE_MS = 45_000;
 
-export function priceFor(model) {
-  const key = Object.keys(PRICES).sort((a, b) => b.length - a.length).find(k => model?.startsWith(k));
-  return key ? PRICES[key] : null;
+// Company rates and names from prices.local.json; they take precedence over PRICES.
+let LOCAL = {};
+export function setLocalPrices(table = {}) {
+  LOCAL = Object.fromEntries(Object.entries(table).map(([id, p]) => [id, { cacheRead: p.in, cacheWrite: p.in, ...p }]));
 }
+
+// Gateways add provider prefixes and version suffixes, e.g. us.anthropic.claude-opus-5-5-v1:0 or claude-haiku-4-5@20251001.
+export const baseModel = m => (m ?? '').replace(/^([a-z]{2,4}\.)?anthropic\./, '').replace(/@.*$/, '').replace(/-v\d+(:\d+)?$/, '').replace(/-\d{8}$/, '');
+
+const lookup = (table, id) => table[Object.keys(table).sort((a, b) => b.length - a.length).find(k => id.startsWith(k))] ?? null;
+const local = m => m ? lookup(LOCAL, m) ?? lookup(LOCAL, baseModel(m)) : null;
+
+export const priceFor = m => m ? local(m) ?? lookup(PRICES, baseModel(m)) : null;
 
 export function inputCost(model, u) {
   const p = priceFor(model);
@@ -32,8 +41,14 @@ export function cost(model, u) {
 }
 
 export const readTokens = u => u.in + u.cr + u.cw + u.cw1h;
-export const family = m => m?.split('-')[1] ?? '?';
-export const shortModel = m => m?.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') ?? '?';
+export const CLAUDE_FAMILIES = ['fable', 'mythos', 'opus', 'sonnet', 'haiku'];
+// Claude models group by family (opus, sonnet…); any other model stands for itself.
+export const family = m => local(m)?.family ?? baseModel(m).match(/^claude-([a-z]+)/)?.[1] ?? (baseModel(m) || '?');
+export function shortModel(m) {
+  if (!m) return '';
+  const id = baseModel(m);
+  return local(m)?.label ?? (id.startsWith('claude-') ? id.slice(7).replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') : id);
+}
 
 function summarize(x = {}) {
   const s = x.command ?? x.message ?? x.file_path ?? x.notebook_path ?? x.pattern ?? x.description ?? x.url ?? x.query
@@ -166,17 +181,20 @@ export function verb(a) {
 
 export function summary(s) {
   const all = [...s.agents.values()], main = s.agents.get('main'), subs = all.filter(a => a.id !== 'main');
-  const mainModel = main?.model, advModel = s.adv.model || main?.advisor;
+  const mainModel = main?.model, advModel = s.adv.model || main?.advisor, mainPriced = !!priceFor(mainModel);
   const sum = (list, f) => list.reduce((t, a) => t + (f(a) ?? 0), 0);
+  // Agents on unpriced models are left out of both sides of every comparison, and the totals are marked partial.
+  const pricedAll = all.filter(a => priceFor(a.model)), pricedSubs = subs.filter(a => priceFor(a.model));
+  const advU = priceFor(advModel) ? s.adv.u : null;
+  const unpriced = [...new Set(all.map(a => a.model).concat(s.adv.calls ? advModel : []).filter(m => m && !priceFor(m)))];
   return {
-    main, subs, mainModel, advModel,
+    main, subs, mainModel, advModel, unpriced, partial: unpriced.length > 0, unpricedSubs: subs.length - pricedSubs.length,
     models: [...new Set(all.map(a => a.model).concat(advModel ?? []).filter(Boolean))],
     advCost: cost(advModel, s.adv.u),
-    cost: sum(all, a => cost(a.model, a.u)) + (cost(advModel, s.adv.u) ?? 0),
-    costIfMain: sum(all, a => cost(mainModel, a.u)) + (cost(mainModel, s.adv.u) ?? 0),
-    readTokens: sum(subs, a => readTokens(a.u)),
-    readCost: sum(subs, a => inputCost(a.model, a.u)),
-    readCostIfMain: sum(subs, a => inputCost(mainModel, a.u)),
-    unpriced: [...new Set(all.map(a => a.model).concat(s.adv.calls ? advModel : []).filter(m => m && !priceFor(m)))],
+    cost: sum(pricedAll, a => cost(a.model, a.u)) + (advU ? cost(advModel, advU) : 0),
+    costIfMain: mainPriced ? sum(pricedAll, a => cost(mainModel, a.u)) + (advU ? cost(mainModel, advU) : 0) : null,
+    readTokens: sum(pricedSubs, a => readTokens(a.u)),
+    readCost: sum(pricedSubs, a => inputCost(a.model, a.u)),
+    readCostIfMain: mainPriced ? sum(pricedSubs, a => inputCost(mainModel, a.u)) : null,
   };
 }

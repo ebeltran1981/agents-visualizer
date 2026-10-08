@@ -2,7 +2,11 @@
 // Claude Code status line: stdin JSON → "opus ● plan · sonnet ✎ editing │ $0.12 vs $4.96"
 import fs from 'node:fs';
 import path from 'node:path';
-import { slim, createState, ingest, ingestMeta, summary, stateOf, verb, family } from './aggregate.js';
+import { fileURLToPath } from 'node:url';
+import { slim, createState, ingest, ingestMeta, summary, stateOf, verb, family, setLocalPrices } from './aggregate.js';
+
+// Optional company rates and names, same file the dashboard uses.
+try { setLocalPrices(JSON.parse(fs.readFileSync(fileURLToPath(new URL('prices.local.json', import.meta.url)), 'utf8'))); } catch {}
 
 const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}');
 const transcript = input.transcript_path;
@@ -31,5 +35,5 @@ const part = a => {
 const active = sum.subs.filter(a => stateOf(a) === 'working');
 const parts = [sum.main && part(sum.main), ...active.slice(0, 3).map(part)].filter(Boolean);
 if (active.length > 3) parts.push(`+${active.length - 3}`);
-const money = n => '$' + (n ?? 0).toFixed(2);
+const money = n => n == null ? '?' : (sum.partial ? '≥$' : '$') + n.toFixed(2);
 console.log(`${parts.join(' · ')} │ ${money(sum.cost)} vs ${money(sum.costIfMain)}`);

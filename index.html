@@ -98,7 +98,7 @@
            padding: 8px 24px; display: flex; justify-content: space-between; gap: 16px; color: var(--dim); font-size: 12px; }
   footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer code { color: var(--lime); } footer b { color: var(--text); font-weight: 500; }
-  .opus { --c: var(--lime); } .sonnet { --c: var(--cyan); } .haiku { --c: var(--amber); } .fable { --c: var(--pink); }
+  .opus { --c: var(--lime); } .sonnet { --c: var(--cyan); } .haiku { --c: var(--amber); } .fable, .mythos { --c: var(--pink); } .other { --c: #cfd4c8; }
   @media (max-width: 720px) {
     body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { justify-content: start; width: 100%; }
     #picker { flex: 1 1 100%; min-width: 0; } h1 { font-size: 32px; }
@@ -142,7 +142,7 @@
 <div class="bill">
   <div class="bar"><span id="mainLabel"></span><div class="track"><div class="fill main" id="mainBar"></div></div><div class="big" id="mainCost"></div></div>
   <div class="bar"><span id="actualLabel"></span><div class="track"><div class="fill" id="actualBar"></div></div><div class="big lime" id="actualCost"></div></div>
-  <div class="billfoot"><span>same tokens × list price · session total <b id="total"></b> vs <b id="totalIfMain"></b> if all on the main model <span id="unpriced"></span></span><span class="x" id="ratio"></span></div>
+  <div class="billfoot"><span>same tokens × list price · session total <span id="partial"></span><b id="total"></b> vs <b id="totalIfMain"></b> if all on the main model <span id="unpriced"></span></span><span class="x" id="ratio"></span></div>
 </div>
 
 <h2>Session log <span id="logCwd"></span></h2>
@@ -151,7 +151,7 @@
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, EFFORT, cost, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, readTokens } from './aggregate.js';
 
 const $ = id => document.getElementById(id);
 const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
@@ -165,7 +165,8 @@ const setHTML = (el, v) => { if (el._html !== v) el.innerHTML = el._html = v; };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
 const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
 const rate = m => { if (!m) return ''; const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
-const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · TODO in aggregate.js'; };
+const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · add it to prices.local.json'; };
+const tint = f => CLAUDE_FAMILIES.includes(f) ? f : 'other';  // non-Claude models get a neutral colour
 const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
 
@@ -229,7 +230,7 @@ function updateCard(parent, a, now) {
   const fresh = !el;
   if (fresh) parent.append(el = makeCard(a.id));
   const k = el.k, st = stateOf(a, now), [sym, v] = verb(a);
-  el.className = `card ${family(a.model)}`;
+  el.className = `card ${tint(family(a.model))}`;
   setText(k.model, a.model ? shortModel(a.model) : 'starting…');
   setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
   setText(k.price, rate(a.model));
@@ -270,11 +271,11 @@ function render() {
   add(s.main?.model, 'plans');
   s.subs.forEach(a => add(a.model, a.writes ? 'edits' : 'reads'));
   add(s.advModel, 'reviews');
-  setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${f}">${f}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || 'waiting for transcript…');
+  setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${tint(f)}">${esc(f)}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || 'waiting for transcript…');
 
   if (s.main) updateCard($('main'), s.main, now);
   const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv;
-  $('advisor').className = `card ${family(adv)}`;
+  $('advisor').className = `card ${tint(family(adv))}`;
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
   setText($('advPrice'), adv ? rate(adv) : '');
   for (const [id, kind] of [['ckPlan', 'plan'], ['ckRepeat', 'repeat'], ['ckDone', 'done']]) {
@@ -294,8 +295,8 @@ function render() {
   s.subs.forEach(a => updateCard($('subs'), a, now));
 
   const max = Math.max(s.readCost, s.readCostIfMain) || 1;
-  setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>`);
-  const subModels = [...new Set(s.subs.map(a => a.model).filter(Boolean))];
+  setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>${s.unpricedSubs ? ` · ${s.unpricedSubs} unpriced left out` : ''}`);
+  const subModels = [...new Set(s.subs.map(a => a.model).filter(priceFor))];
   setHTML($('mainLabel'), `on ${esc(shortModel(s.mainModel))}<small>${esc(readRate(s.mainModel))}</small>`);
   setHTML($('actualLabel'), `on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? readRate(subModels[0]) : subModels.length ? 'mixed rates' : '')}</small>`);
   $('actualBar').style.width = (100 * s.readCost / max) + '%';
@@ -304,13 +305,14 @@ function render() {
   tween($('mainCost'), s.readCostIfMain, fmt$);
   tween($('total'), s.cost, fmt$);
   tween($('totalIfMain'), s.costIfMain, fmt$);
-  const x = s.readCost ? s.readCostIfMain / s.readCost : 0;
+  const x = s.readCost && s.readCostIfMain ? s.readCostIfMain / s.readCost : 0;
   const ratio = !x ? '' : x >= 1.05 ? x.toFixed(1) + '× less' : 'same price';
   if ($('ratio').textContent !== ratio) { $('ratio').textContent = ratio; if (ratio) pop($('ratio')); }
-  setText($('unpriced'), s.unpriced.length ? `· no price for ${s.unpriced.join(', ')} (TODO in aggregate.js)` : '');
+  setText($('partial'), s.partial ? '≥ ' : '');
+  setText($('unpriced'), s.partial ? `· no price for ${s.unpriced.join(', ')}: add them to prices.local.json` : '');
   setText($('logCwd'), basename(state.cwd));
 
-  const subFams = [...new Set(s.subs.filter(a => a.model).map(a => family(a.model)))].join(' + ');
+  const subFams = [...new Set(s.subs.filter(a => priceFor(a.model)).map(a => family(a.model)))].join(' + ');  // matches readTokens
   $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ claude --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
   $('cmd').title = 'reconstructed from the transcript';
   const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');
@@ -339,7 +341,7 @@ function appendLog(rows) {
       log.insertBefore(d, $('cursor'));
     }
     const el = document.createElement('div');
-    el.className = `ln ${r.fam}` + (r.err ? ' err' : '');
+    el.className = `ln ${tint(r.fam)}` + (r.err ? ' err' : '');
     el.title = r.ts;
     el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span><span class="dim">${esc(r.note)}</span>`;
     log.insertBefore(el, $('cursor'));
@@ -421,6 +423,7 @@ picker.onchange = () => { params.delete('replay'); $('replay').checked = quiet(p
 $('replay').onchange = () => { params.set('replay', $('replay').checked ? '1' : '0'); connect(picker.value); };
 $('speed').onchange = () => { speed = +$('speed').value; params.set('speed', speed); if (!speed) replaying = false; history.replaceState(null, '', '?' + params); };
 
+try { setLocalPrices(await (await fetch('/prices.local.json')).json()); } catch { /* the server logs a bad file */ }
 connect(chosen);
 requestAnimationFrame(frame);
 </script>

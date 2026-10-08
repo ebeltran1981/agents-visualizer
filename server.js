@@ -8,9 +8,10 @@ import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import { slim } from './aggregate.js';
 
-const ROOT = path.join(os.homedir(), '.claude', 'projects');
+const ROOT = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.PORT || 4321);
+const LOCAL_PRICES = path.join(HERE, 'prices.local.json');
 const STATIC = { '/': ['index.html', 'text/html'], '/aggregate.js': ['aggregate.js', 'text/javascript'] };
 
 // Folder names turn '/' into '-', which is lossy, so read the real cwd from the transcript head.
@@ -105,6 +106,12 @@ http.createServer((req, res) => {
     const [file, type] = STATIC[url.pathname];
     res.writeHead(200, { 'content-type': type });
     return fs.createReadStream(path.join(HERE, file)).pipe(res);
+  }
+  if (url.pathname === '/prices.local.json') {
+    let table = {};
+    try { table = JSON.parse(fs.readFileSync(LOCAL_PRICES, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error(`prices.local.json ignored: ${e.message}`); }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify(table));
   }
   if (url.pathname === '/api/sessions') {
     res.writeHead(200, { 'content-type': 'application/json' });
