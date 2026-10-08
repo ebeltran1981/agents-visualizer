@@ -2,7 +2,7 @@
 // <root>/<encoded cwd>/<ISO timestamp>_<id>.jsonl, appended one record per line.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde } from './common.js';
+import { tail, summarize, verdictOf, tilde, every } from './common.js';
 
 const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.filter(b => b.type === 'text').map(b => b.text).join('\n') : '';
 
@@ -66,8 +66,7 @@ export function piHarness({ id, label, bin, root, subagentsOf = () => [] }) {
   // Same contract as harnesses/claude.js: push batches of { a, r } and { a, meta }; end() on a rewritten file.
   function watch(key, push, end) {
     const polls = new Map();
-    let batch = [];
-    const stop = () => clearInterval(timer);
+    let batch = [], stop;
     const follow = (agent, file) => {
       const ctx = { prefix: agent === 'main' ? '' : agent + '/' };
       polls.set(agent, tail(file, line => {
@@ -85,9 +84,8 @@ export function piHarness({ id, label, bin, root, subagentsOf = () => [] }) {
       push(batch);
       batch = [];
     };
-    const timer = setInterval(tick, 500);
-    tick();
-    return stop;
+    stop = every(500, tick, end);
+    return () => stop();
   }
 
   return { id, label, bin, root: tilde(root), listSessions, resolve, valid, watch };

@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde } from './common.js';
+import { tail, summarize, verdictOf, tilde, every } from './common.js';
 
 const ROOT = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
 
@@ -70,8 +70,7 @@ const valid = key => !!key && path.resolve(key).startsWith(ROOT + path.sep) && k
 function watch(key, push, end) {
   const subDir = path.join(key.slice(0, -6), 'subagents');
   const polls = new Map();
-  let batch = [];
-  const stop = () => clearInterval(timer);
+  let batch = [], stop;
   const follow = (id, file) => polls.set(id, tail(file, line => {
     try { const r = slim(JSON.parse(line)); if (r) batch.push({ a: id, r }); } catch {}
   }, () => { stop(); end(); }));
@@ -92,9 +91,8 @@ function watch(key, push, end) {
     push(batch);
     batch = [];
   };
-  const timer = setInterval(tick, 500);
-  tick();
-  return stop;
+  stop = every(500, tick, end);
+  return () => stop();
 }
 
 export default { id: 'claude', label: 'claude code', bin: 'claude', root: tilde(ROOT), listSessions, resolve, valid, watch };
