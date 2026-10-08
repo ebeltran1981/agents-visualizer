@@ -13,6 +13,15 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.PORT || 4321);
 const STATIC = { '/': ['index.html', 'text/html'], '/aggregate.js': ['aggregate.js', 'text/javascript'] };
 
+// Folder names turn '/' into '-', which is lossy, so read the real cwd from the transcript head.
+function cwdOf(file) {
+  const buf = Buffer.alloc(64 * 1024), fd = fs.openSync(file, 'r');
+  const head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0));
+  fs.closeSync(fd);
+  const cwd = head.match(/"cwd":"([^"]+)"/)?.[1];
+  return cwd && cwd.replace(os.homedir(), '~');
+}
+
 function listSessions(limit = 40) {
   const out = [];
   for (const project of fs.readdirSync(ROOT)) {
@@ -20,7 +29,8 @@ function listSessions(limit = 40) {
     try { files = fs.readdirSync(path.join(ROOT, project)); } catch { continue; }
     for (const f of files.filter(f => f.endsWith('.jsonl'))) {
       const p = path.join(ROOT, project, f), st = fs.statSync(p);
-      out.push({ path: p, project, id: f.slice(0, -6), mtime: st.mtimeMs, size: st.size });
+      if (!st.size) continue;
+      out.push({ path: p, project, cwd: cwdOf(p) ?? project, id: f.slice(0, -6), mtime: st.mtimeMs, size: st.size });
     }
   }
   return out.sort((a, b) => b.mtime - a.mtime).slice(0, limit);

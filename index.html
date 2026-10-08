@@ -130,8 +130,8 @@
       <span class="pill" id="ckDone"><b>3</b>before "done"</span>
     </div>
     <div class="status" id="advStatus"></div>
-    <div class="foot"><span id="advQuiet"></span><span>calls <b id="advCalls"></b></span></div>
-    <div class="dim note">checkpoints inferred from the transcript · advisor calls themselves aren't logged there</div>
+    <div class="foot"><span id="advQuiet"></span><span><span id="advSpend"></span> · calls <b id="advCalls"></b></span></div>
+    <div class="dim note">pills are inferred checkpoints · calls and tokens are logged advisor calls</div>
   </div>
 </div>
 <div class="link delegates" id="delegates"><span>delegates ↓</span><i><b></b></i></div>
@@ -166,7 +166,7 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
 const rate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
 const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · TODO in aggregate.js'; };
-const READ_ONLY = ['Explore', 'Plan'];
+const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
 
 let state, es, queue, metaStash, replaying, vt, played, lastRecord, dirty;
@@ -237,7 +237,7 @@ function updateCard(parent, a, now) {
   setText(k.desc, a.desc || (a.id === 'main' ? `leads the session in ${basename(state.cwd)}` : ''));
   setText(k.effort, a.effort || '—');
   el.segs.forEach((b, i) => b.classList.toggle('on', i < (EFFORT[a.effort] ?? 0)));
-  setText(k.ro, READ_ONLY.includes(a.type) ? 'read-only' : '');
+  setText(k.ro, READ_ONLY.test(a.type) ? 'read-only' : '');
   setText(k.err, a.errors ? `${a.errors} err` : '');
   tween(k.files, a.files.size, fmtN);
   tween(k.tools, a.tools, fmtN);
@@ -268,11 +268,11 @@ function render() {
   const add = (m, verb) => m && (roles[family(m)] ??= new Set()).add(verb);
   add(s.main?.model, 'plans');
   s.subs.forEach(a => add(a.model, a.writes ? 'edits' : 'reads'));
-  add(s.main?.advisor, 'reviews');
+  add(s.advModel, 'reviews');
   setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${f}">${f}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || 'waiting for transcript…');
 
   if (s.main) updateCard($('main'), s.main, now);
-  const adv = s.main?.advisor, c = state.checks, lc = state.lastCheck;
+  const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv;
   $('advisor').className = `card ${family(adv)}`;
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
   setText($('advPrice'), adv ? rate(adv) : '');
@@ -281,10 +281,14 @@ function render() {
     if (on !== el.classList.contains('on')) { el.classList.toggle('on', on); if (on) pop(el); }
     setText(el.querySelector('b'), on ? String(c[kind]) : el.dataset.n ??= el.querySelector('b').textContent);
   }
-  setHTML($('advStatus'), lc ? `<i>»</i> ${CHECK_TEXT[lc.kind]}` : '<span class="dim">no checkpoint yet</span>');
-  const recent = lc && now - lc.ts < 60_000;
-  setText($('advQuiet'), recent ? `● checkpoint reached` : `○ quiet until ${family(s.main?.model)} asks`);
-  const calls = String(state.advCalls);
+  // the latest of an actual advisor call or an inferred checkpoint drives the status line
+  const called = call.calls && call.ts >= (lc?.ts ?? 0);
+  setHTML($('advStatus'), called ? `<i>»</i> asked at ${time(call.ts)} · read the full transcript`
+    : lc ? `<i>»</i> ${CHECK_TEXT[lc.kind]}` : '<span class="dim">no checkpoint yet</span>');
+  const recent = now - Math.max(lc?.ts ?? 0, call.ts) < 60_000;
+  setText($('advQuiet'), recent ? (called ? '● reviewing' : '● checkpoint reached') : `○ quiet until ${family(s.main?.model)} asks`);
+  setText($('advSpend'), call.calls ? `${fmtK(readTokens(call.u))} read · ${fmt$(s.advCost)}` : '');
+  const calls = String(call.calls);
   if ($('advCalls').textContent !== calls) { if ($('advCalls').textContent) pop($('advCalls'), 1.3); $('advCalls').textContent = calls; }
   s.subs.forEach(a => updateCard($('subs'), a, now));
 
@@ -346,7 +350,7 @@ function appendLog(rows) {
 // Every event goes through the queue; replay drains it on a virtual clock, live drains it at once.
 function apply(events) {
   const rows = [];
-  const before = state.checks.plan + state.checks.repeat + state.checks.done + state.advCalls;
+  const before = state.checks.plan + state.checks.repeat + state.checks.done + state.adv.calls;
   let delegated = false;
   for (const { a, r } of events) {
     if (metaStash[a]) { ingestMeta(state, a, metaStash[a]); delete metaStash[a]; }  // spawn card on first record
@@ -357,7 +361,7 @@ function apply(events) {
   if (!events.length) return;
   appendLog(rows);
   if (delegated) pulse($('delegates'));
-  if (state.checks.plan + state.checks.repeat + state.checks.done + state.advCalls > before) pulse($('asks'));
+  if (state.checks.plan + state.checks.repeat + state.checks.done + state.adv.calls > before) pulse($('asks'));
   dirty = true;
 }
 
@@ -404,7 +408,7 @@ function connect(session) {
 
 const { default: def, sessions } = await (await fetch('/api/sessions')).json();
 const picker = $('picker'), chosen = params.get('session') || def;
-for (const s of sessions) picker.add(new Option(`${s.project.replace(/^-home-[^-]+-/, '~/').replace(/-/g, '/')} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString()}`, s.path));
+for (const s of sessions) picker.add(new Option(`${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString()}`, s.path));
 if (!sessions.some(s => s.path === chosen)) picker.add(new Option(chosen, chosen), 0);
 picker.value = chosen;
 

@@ -53,7 +53,9 @@ export function slim(o) {
       t: 'a', ts: o.timestamp, id: m.id, model: m.model, effort: o.effort, advisor: o.advisorModel, cwd: o.cwd,
       u: { in: u.input_tokens ?? 0, out: u.output_tokens ?? 0, cr: u.cache_read_input_tokens ?? 0,
            cw: (u.cache_creation_input_tokens ?? 0) - cw1h, cw1h },
-      adv: (u.iterations ?? []).filter(i => /advisor/.test(i.type)).length,
+      // advisor calls report their own model and tokens here; top-level usage leaves them out
+      adv: (u.iterations ?? []).filter(i => i.type === 'advisor_message').map(i => ({ model: i.model,
+        u: { in: i.input_tokens ?? 0, out: i.output_tokens ?? 0, cr: i.cache_read_input_tokens ?? 0, cw: i.cache_creation_input_tokens ?? 0, cw1h: 0 } })),
       tools: content.filter(c => c.type === 'tool_use')
         .map(c => ({ id: c.id, name: c.name, input: summarize(c.input), file: c.input?.file_path ?? c.input?.notebook_path })),
       text: content.filter(c => c.type === 'text').map(c => c.text).join('\n').slice(0, 600) || undefined,
@@ -72,7 +74,7 @@ const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
 const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
-  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', advCalls: 0 };
+  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', adv: { model: '', u: zero(), calls: 0, ts: 0 } };
 }
 
 function agentOf(s, id) {
@@ -104,8 +106,12 @@ export function ingest(s, id, r) {
     Object.assign(a, { model: r.model, effort: r.effort ?? a.effort, advisor: r.advisor ?? a.advisor });
     // One API message is split over several lines that repeat its usage: count it once.
     const prev = a.usage.get(r.id);
-    if (prev) { addU(a.u, prev.u, -1); s.advCalls -= prev.adv; }
-    addU(a.u, r.u); s.advCalls += r.adv;
+    if (prev) { addU(a.u, prev.u, -1); prev.adv.forEach(x => addU(s.adv.u, x.u, -1)); s.adv.calls -= prev.adv.length; }
+    addU(a.u, r.u); r.adv.forEach(x => addU(s.adv.u, x.u)); s.adv.calls += r.adv.length;
+    for (const x of r.adv.slice(prev?.adv.length ?? 0)) {
+      Object.assign(s.adv, { model: x.model, ts: a.lastTs });
+      row('advisor', `asks ${shortModel(x.model)} · it reads ${Math.round((x.u.in + x.u.cr) / 1000)}k tokens`, family(x.model));
+    }
     a.usage.set(r.id, r);
     for (const t of r.tools) {
       a.tools++; a.lastKind = 'tool'; a.activity = t;
@@ -155,16 +161,17 @@ export function verb(a) {
 
 export function summary(s) {
   const all = [...s.agents.values()], main = s.agents.get('main'), subs = all.filter(a => a.id !== 'main');
-  const mainModel = main?.model;
+  const mainModel = main?.model, advModel = s.adv.model || main?.advisor;
   const sum = (list, f) => list.reduce((t, a) => t + (f(a) ?? 0), 0);
   return {
-    main, subs, mainModel,
-    models: [...new Set(all.map(a => a.model).concat(main?.advisor ?? []).filter(Boolean))],
-    cost: sum(all, a => cost(a.model, a.u)),
-    costIfMain: sum(all, a => cost(mainModel, a.u)),
+    main, subs, mainModel, advModel,
+    models: [...new Set(all.map(a => a.model).concat(advModel ?? []).filter(Boolean))],
+    advCost: cost(advModel, s.adv.u),
+    cost: sum(all, a => cost(a.model, a.u)) + (cost(advModel, s.adv.u) ?? 0),
+    costIfMain: sum(all, a => cost(mainModel, a.u)) + (cost(mainModel, s.adv.u) ?? 0),
     readTokens: sum(subs, a => readTokens(a.u)),
     readCost: sum(subs, a => inputCost(a.model, a.u)),
     readCostIfMain: sum(subs, a => inputCost(mainModel, a.u)),
-    unpriced: [...new Set(all.filter(a => a.model && !priceFor(a.model)).map(a => a.model))],
+    unpriced: [...new Set(all.map(a => a.model).concat(s.adv.calls ? advModel : []).filter(m => m && !priceFor(m)))],
   };
 }
