@@ -1,4 +1,4 @@
-// Shared transcript parsing + aggregation. Used by server.js (slim), index.html and statusline.js.
+// Harness-agnostic aggregation of normalized records (see harnesses/). Used by index.html and statusline.js.
 
 // USD per 1M tokens. cacheWrite = 5-minute TTL write; 1-hour writes are billed at 2x input.
 // Unknown models show "?" instead of a guessed price; add your own in prices.local.json.
@@ -48,43 +48,6 @@ export function shortModel(m) {
   if (!m) return '';
   const id = baseModel(m);
   return local(m)?.label ?? (id.startsWith('claude-') ? id.slice(7).replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') : id);
-}
-
-function summarize(x = {}) {
-  const s = x.command ?? x.message ?? x.file_path ?? x.notebook_path ?? x.pattern ?? x.description ?? x.url ?? x.query
-    ?? x.prompt ?? x.skill ?? Object.values(x).find(v => typeof v === 'string') ?? '';
-  return String(s).split('\n')[0].slice(0, 160);
-}
-
-const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.map(b => b.text ?? '').join(' ') : '';
-
-// Reduce one raw JSONL record to the few fields the dashboard needs.
-export function slim(o) {
-  const m = o.message;
-  if (o.type === 'assistant' && m) {
-    const u = m.usage ?? {}, cw1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
-    const content = Array.isArray(m.content) ? m.content : [];
-    const text = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
-    return {
-      t: 'a', ts: o.timestamp, id: m.id, model: m.model, effort: o.effort, advisor: o.advisorModel, cwd: o.cwd,
-      u: { in: u.input_tokens ?? 0, out: u.output_tokens ?? 0, cr: u.cache_read_input_tokens ?? 0,
-           cw: (u.cache_creation_input_tokens ?? 0) - cw1h, cw1h },
-      // advisor calls report their own model and tokens here; top-level usage leaves them out
-      adv: (u.iterations ?? []).filter(i => i.type === 'advisor_message').map(i => ({ model: i.model,
-        u: { in: i.input_tokens ?? 0, out: i.output_tokens ?? 0, cr: i.cache_read_input_tokens ?? 0, cw: i.cache_creation_input_tokens ?? 0, cw1h: 0 } })),
-      tools: content.filter(c => c.type === 'tool_use')
-        .map(c => ({ id: c.id, name: c.name, input: summarize(c.input), file: c.input?.file_path ?? c.input?.notebook_path })),
-      text: text.slice(0, 600) || undefined,
-      verdict: text.trim().split('\n').pop().replace(/[*`_#\s]/g, '').match(/^(PASS|FAIL)$/)?.[1],  // last line only
-    };
-  }
-  if (o.type === 'user' && m) {
-    const results = Array.isArray(m.content) ? m.content.filter(c => c.type === 'tool_result') : [];
-    if (results.length) return { t: 'r', ts: o.timestamp, results: results.map(r => ({ err: !!r.is_error, msg: r.is_error ? textOf(r.content).slice(0, 160) : undefined })) };
-    const text = textOf(m.content).trim();
-    if (!o.isMeta && text && !text.startsWith('<')) return { t: 'p', ts: o.timestamp, text: text.slice(0, 200), cwd: o.cwd };
-  }
-  return null;
 }
 
 const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });

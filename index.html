@@ -110,11 +110,12 @@
 </head>
 <body>
 <header>
-  <div><div class="kicker">Claude Code · session</div><h1 id="title">— models, <em>one session.</em></h1><div class="sub" id="roles">connecting…</div></div>
+  <div><div class="kicker" id="kicker">session</div><h1 id="title">— models, <em>one session.</em></h1><div class="sub" id="roles">connecting…</div></div>
   <div class="controls">
     <span class="dim" id="progress"></span>
     <label><input type="checkbox" id="replay"> replay</label>
     <select id="speed"><option value="5">5x</option><option value="20" selected>20x</option><option value="100">100x</option><option value="0">instant</option></select>
+    <select id="harness" title="agent harness"></select>
     <select id="picker"></select>
   </div>
 </header>
@@ -170,7 +171,7 @@ const tint = f => CLAUDE_FAMILIES.includes(f) ? f : 'other';  // non-Claude mode
 const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
 
-let state, es, queue, metaStash, replaying, vt, played, lastRecord, dirty;
+let state, es, queue, metaStash, replaying, vt, played, lastRecord, dirty, emptyMsg = '';
 const params = new URLSearchParams(location.search);
 let speed = +(params.get('speed') ?? 20);
 $('speed').value = String(speed);
@@ -271,7 +272,7 @@ function render() {
   add(s.main?.model, 'plans');
   s.subs.forEach(a => add(a.model, a.writes ? 'edits' : 'reads'));
   add(s.advModel, 'reviews');
-  setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${tint(f)}">${esc(f)}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || 'waiting for transcript…');
+  setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${tint(f)}">${esc(f)}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || emptyMsg || 'waiting for transcript…');
 
   if (s.main) updateCard($('main'), s.main, now);
   const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv;
@@ -313,7 +314,7 @@ function render() {
   setText($('logCwd'), basename(state.cwd));
 
   const subFams = [...new Set(s.subs.filter(a => priceFor(a.model)).map(a => family(a.model)))].join(' + ');  // matches readTokens
-  $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ claude --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
+  $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ ${esc(harness.bin)} --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
   $('cmd').title = 'reconstructed from the transcript';
   const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');
   setHTML($('effortSummary'), s.main ? `effort <b>${esc(efforts)}</b> · subagents <b>${s.subs.length}</b>`
@@ -387,16 +388,21 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 
-function connect(session) {
+function reset() {
   es?.close();
   state = createState();
   queue = []; metaStash = {}; replaying = false; lastRecord = 0; lastDay = ''; stick = true;
   $('main').innerHTML = $('subs').innerHTML = '';
   [...log.children].forEach(el => el.id !== 'cursor' && el.remove());
   ['advCalls', 'ratio'].forEach(id => $(id).textContent = '');
+}
+
+function connect(session) {
+  reset();
+  emptyMsg = '';
   let first = true;
-  es = new EventSource('/events?session=' + encodeURIComponent(session));
-  es.onmessage = e => {
+  const source = es = new EventSource(`/events?harness=${harness.id}&session=${encodeURIComponent(session)}`);
+  source.onmessage = e => {
     for (const ev of JSON.parse(e.data)) ev.meta ? metaStash[ev.a] = ev.meta : queue.push(ev);
     if (first && queue.length && $('replay').checked && speed > 0) {
       replaying = true;
@@ -405,26 +411,51 @@ function connect(session) {
     }
     first = false;
   };
+  // Reconnect from a fresh state, never on top of the old one, so nothing is counted twice.
+  source.onerror = () => { source.close(); setTimeout(() => es === source && connect(session), 2000); };
+  params.set('harness', harness.id);
   params.set('session', session);
   history.replaceState(null, '', '?' + params);
 }
 
-const { default: def, sessions } = await (await fetch('/api/sessions')).json();
-const picker = $('picker'), chosen = params.get('session') || def;
-for (const s of sessions) picker.add(new Option(`${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString()}`, s.path));
-if (!sessions.some(s => s.path === chosen)) picker.add(new Option(chosen, chosen), 0);
-picker.value = chosen;
+const picker = $('picker'), harnessPicker = $('harness');
+const { default: defHarness, harnesses } = await (await fetch('/api/harnesses')).json();
+for (const h of harnesses) harnessPicker.add(new Option(h.label, h.id));
+let harness, sessions = [];
 
 // Replay by default when the transcript has been quiet for 60 s.
-const quiet = path => Date.now() - (sessions.find(s => s.path === path)?.mtime ?? Date.now()) > 60_000;
-$('replay').checked = params.has('replay') ? params.get('replay') === '1' : quiet(chosen);
+const quiet = key => Date.now() - (sessions.find(s => s.key === key)?.mtime ?? Date.now()) > 60_000;
 
+async function pickHarness(id, session) {
+  harness = harnesses.find(h => h.id === id) ?? harnesses.find(h => h.id === defHarness);
+  harnessPicker.value = harness.id;
+  setText($('kicker'), `${harness.label} · session`);
+  const r = await (await fetch(`/api/sessions?harness=${harness.id}`)).json();
+  sessions = r.sessions;
+  picker.innerHTML = '';
+  for (const s of sessions) picker.add(new Option(`${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString()}`, s.key));
+  const chosen = session || r.default;
+  picker.disabled = !chosen;
+  if (!chosen) {
+    reset();
+    emptyMsg = `no ${harness.label} sessions in ${r.root}`;
+    picker.add(new Option(emptyMsg, ''));
+    params.set('harness', harness.id); params.delete('session');
+    return history.replaceState(null, '', '?' + params);
+  }
+  if (!sessions.some(s => s.key === chosen)) picker.add(new Option(chosen, chosen), 0);
+  picker.value = chosen;
+  $('replay').checked = params.has('replay') ? params.get('replay') === '1' : quiet(chosen);
+  connect(chosen);
+}
+
+harnessPicker.onchange = () => { params.delete('replay'); pickHarness(harnessPicker.value); };
 picker.onchange = () => { params.delete('replay'); $('replay').checked = quiet(picker.value); connect(picker.value); };
 $('replay').onchange = () => { params.set('replay', $('replay').checked ? '1' : '0'); connect(picker.value); };
 $('speed').onchange = () => { speed = +$('speed').value; params.set('speed', speed); if (!speed) replaying = false; history.replaceState(null, '', '?' + params); };
 
 try { setLocalPrices(await (await fetch('/prices.local.json')).json()); } catch { /* the server logs a bad file */ }
-connect(chosen);
+await pickHarness(params.get('harness'), params.get('session'));
 requestAnimationFrame(frame);
 </script>
 </body>

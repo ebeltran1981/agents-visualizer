@@ -1,15 +1,16 @@
 # agents-visualizer
 
-Live dashboard of one Claude Code session: the main agent, its advisor and its subagents, with the model each one runs, what it is doing, token use and cost.
+Live dashboard of one coding-agent session: the main agent, its advisor and its subagents, with the model each one runs, what it is doing, token use and cost. Pick the agent harness from a dropdown.
 
 ![Four models, one session: an Opus 5.5 main agent with a Fable 5.1 advisor and 10 Haiku 4.5 and Sonnet 5.5 subagents](docs/demo.png)
 
 *A real run: Opus 5.5 plans and reviews, Fable 5.1 advises at two checkpoints, and 10 subagents (Haiku 4.5 reads, Sonnet 5.5 edits) build a small library in 4m46s for $3.11.*
 
-It only reads the transcripts Claude Code already writes, and never writes into `~/.claude`:
+It only reads the session files each harness already writes, and never writes into them.
 
-- `~/.claude/projects/<project>/<sessionId>.jsonl` (main agent)
-- `~/.claude/projects/<project>/<sessionId>/subagents/agent-<id>.jsonl` and `.meta.json` (subagents)
+| Harness | Sessions read from |
+|---|---|
+| claude code | `~/.claude/projects/<project>/<sessionId>.jsonl`, with subagents in `<sessionId>/subagents/agent-<id>.jsonl` and `.meta.json` |
 
 ## Setup
 
@@ -27,12 +28,13 @@ Start the server, then open http://localhost:4321.
 
 ```sh
 node server.js                       # opens the most recently modified session
+node server.js --harness claude      # starts on another harness (claude is the default)
 node server.js --session <id|path>   # opens a specific session
 PORT=5000 node server.js             # uses another port
 CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn't in ~/.claude
 ```
 
-- **Pick a session** with the dropdown in the top right. It lists the 40 most recent sessions on this computer, labelled by project folder and session id.
+- **Pick a harness** with the first dropdown in the top right, then **pick a session** with the second. It lists that harness's 40 most recent sessions on this computer, labelled by project folder and session id. A harness with no sessions says where it looked.
 - **Live sessions** stream in as Claude Code writes them. Leave the dashboard open while you work in another terminal.
 - **Finished sessions** replay by default (any session quiet for 60 s). Choose 5x, 20x or 100x, or "instant" to load everything at once. Untick "replay" to load without playback.
 - **URL parameters** make a view shareable or scriptable: `?session=<path>&replay=1&speed=20`.
@@ -121,8 +123,9 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 
 | File | Purpose |
 |---|---|
-| `server.js` | Tails the transcripts and pushes slimmed records over SSE (`/events`). Also serves `/api/sessions`. |
-| `aggregate.js` | Shared parsing, aggregation and the price table. The browser and `statusline.js` both use it. |
+| `server.js` | Streams the selected harness's session over SSE (`/events`). Also serves `/api/harnesses` and `/api/sessions`. |
+| `harnesses/*.js` | One adapter per harness: lists its sessions and turns its files into the shared record format. |
+| `aggregate.js` | Harness-agnostic aggregation and the price table. The browser and `statusline.js` both use it. |
 | `prices.local.example.json` | Template for your own rates and model names; copy it to `prices.local.json`. |
 | `index.html` | The dashboard, written in vanilla JS and CSS. |
 | `statusline.js` | The one-line status line. |
@@ -134,4 +137,4 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 - Advisor calls appear in transcripts as a `server_tool_use` block named `advisor`. Their tokens appear only in `usage.iterations` (type `advisor_message`, with the advisor's model), not in the top-level usage, so the dashboard adds them separately at the advisor's price.
 - The checkpoint pills are inferred. A real advisor call lights "before the plan" if no subagent has started yet, "same error twice" if a tool error just repeated, and "before done" if every subagent has finished. `EnterPlanMode`, repeated errors and turn ends also count.
 - The footer's command line is reconstructed from the transcript's model and effort.
-- If the server restarts while a page is open, the page reconnects and counts the backlog twice. Reload the page.
+- If the server restarts or a session file is rewritten, the page reconnects and rebuilds from scratch, so nothing is counted twice.

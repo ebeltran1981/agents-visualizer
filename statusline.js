@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { slim, createState, ingest, ingestMeta, summary, stateOf, verb, family, setLocalPrices } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, verb, family, setLocalPrices } from './aggregate.js';
+import { slim } from './harnesses/claude.js';
 
 // Optional company rates and names, same file the dashboard uses.
 try { setLocalPrices(JSON.parse(fs.readFileSync(fileURLToPath(new URL('prices.local.json', import.meta.url)), 'utf8'))); } catch {}
