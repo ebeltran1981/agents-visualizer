@@ -2,9 +2,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde, every } from './common.js';
+import { tail, summarize, verdictOf, tilde, every, installed } from './common.js';
 
-const ROOT = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
+const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+const ROOT = path.join(HOME, 'projects');
 
 const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.map(b => b.text ?? '').join(' ') : '';
 
@@ -95,4 +96,4 @@ function watch(key, push, end) {
   return () => stop();
 }
 
-export default { id: 'claude', label: 'claude code', bin: 'claude', root: tilde(ROOT), listSessions, resolve, valid, watch };
+export default { id: 'claude', label: 'claude code', bin: 'claude', root: tilde(ROOT), installed: installed('claude', HOME), listSessions, resolve, valid, watch };

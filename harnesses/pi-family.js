@@ -2,7 +2,7 @@
 // <root>/<encoded cwd>/<ISO timestamp>_<id>.jsonl, appended one record per line.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde, every } from './common.js';
+import { tail, summarize, verdictOf, tilde, every, installed } from './common.js';
 
 // oh-my-pi subagents hand back structured data with yield; PASS/FAIL usually sits in its status or result field.
 const yieldVerdict = x => typeof x?.data === 'string' ? verdictOf(x.data)
@@ -51,7 +51,7 @@ function cwdOf(file) {
   return tilde(head.match(/"type":"session"[^\n]*?"cwd":"([^"]+)"/)?.[1]);
 }
 
-export function piHarness({ id, label, bin, root, subagentsOf = () => [] }) {
+export function piHarness({ id, label, bin, home, root, subagentsOf = () => [] }) {
   function listSessions(limit = 40) {
     const out = [];
     let dirs = [];
@@ -96,5 +96,5 @@ export function piHarness({ id, label, bin, root, subagentsOf = () => [] }) {
     return () => stop();
   }
 
-  return { id, label, bin, root: tilde(root), listSessions, resolve, valid, watch };
+  return { id, label, bin, root: tilde(root), installed: installed(bin, home), listSessions, resolve, valid, watch };
 }

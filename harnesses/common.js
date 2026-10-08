@@ -1,7 +1,13 @@
 // Helpers shared by the harness adapters (server side only).
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+
+// A harness counts as installed when its CLI is on PATH or its data folder exists. Checked on each call,
+// so a harness installed while the server runs shows up on the next page load.
+export const installed = (bin, home) => () => fs.existsSync(home) || (process.env.PATH ?? '').split(path.delimiter)
+  .some(dir => { try { fs.accessSync(path.join(dir, bin), fs.constants.X_OK); return true; } catch { return false; } });
 
 export const tilde = p => p?.startsWith(os.homedir()) ? '~' + p.slice(os.homedir().length) : p;
 

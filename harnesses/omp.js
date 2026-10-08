@@ -21,4 +21,6 @@ function subagentsOf(key) {
   return out;
 }
 
-export default piHarness({ id: 'omp', label: 'oh-my-pi', bin: 'omp', root: path.join(os.homedir(), '.omp', 'agent', 'sessions'), subagentsOf });
+const home = path.join(os.homedir(), '.omp');
+
+export default piHarness({ id: 'omp', label: 'oh-my-pi', bin: 'omp', home, root: path.join(home, 'agent', 'sessions'), subagentsOf });

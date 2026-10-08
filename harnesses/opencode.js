@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { summarize, verdictOf, tilde, every } from './common.js';
+import { summarize, verdictOf, tilde, every, installed } from './common.js';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch {}  // built in, unflagged since Node 22.13
@@ -107,4 +107,4 @@ function watch(key, push, end) {
 // Shown instead of "no sessions" when this Node can't read opencode's database at all.
 const note = DatabaseSync ? undefined : 'opencode needs Node 22.13 or later (node:sqlite)';
 
-export default { id: 'opencode', label: 'opencode', bin: 'opencode', root: tilde(DB), note, listSessions, resolve, valid, watch };
+export default { id: 'opencode', label: 'opencode', bin: 'opencode', root: tilde(DB), note, installed: installed('opencode', path.dirname(DB)), listSessions, resolve, valid, watch };

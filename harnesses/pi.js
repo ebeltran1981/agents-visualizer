@@ -5,4 +5,4 @@ import { piHarness } from './pi-family.js';
 
 const base = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent');
 
-export default piHarness({ id: 'pi', label: 'pi', bin: 'pi', root: path.join(base, 'sessions') });
+export default piHarness({ id: 'pi', label: 'pi', bin: 'pi', home: base, root: path.join(base, 'sessions') });

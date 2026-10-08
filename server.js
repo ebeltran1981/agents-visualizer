@@ -9,14 +9,19 @@ import omp from './harnesses/omp.js';
 import pi from './harnesses/pi.js';
 import opencode from './harnesses/opencode.js';
 
-const HARNESSES = Object.fromEntries([claude, omp, pi, opencode].map(h => [h.id, h]));
+const ALL = [claude, omp, pi, opencode];
+const HARNESSES = Object.fromEntries(ALL.map(h => [h.id, h]));
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.PORT || 4321);
 const LOCAL_PRICES = path.join(HERE, 'prices.local.json');
 const STATIC = { '/': ['index.html', 'text/html'], '/aggregate.js': ['aggregate.js', 'text/javascript'] };
 
 const arg = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : ''; };
-const startHarness = HARNESSES[arg('--harness')] ?? claude;
+// Only harnesses installed on this computer appear in the dropdown, plus one asked for with --harness.
+const forced = HARNESSES[arg('--harness')];
+const detected = () => ALL.filter(h => h === forced || h.installed());
+const startHarness = forced ?? detected()[0] ?? claude;
+const available = () => { const list = detected(); return list.length ? list : [startHarness]; };
 const startSession = arg('--session') && startHarness.resolve(arg('--session'));
 
 const json = (res, body) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
@@ -46,7 +51,7 @@ http.createServer((req, res) => {
     return json(res, table);
   }
   if (url.pathname === '/api/harnesses') {
-    return json(res, { default: startHarness.id, harnesses: Object.values(HARNESSES).map(({ id, label, bin, root }) => ({ id, label, bin, root })) });
+    return json(res, { default: startHarness.id, harnesses: available().map(({ id, label, bin, root }) => ({ id, label, bin, root })) });
   }
   if (url.pathname === '/api/sessions') {
     const sessions = harness.listSessions();
@@ -57,4 +62,4 @@ http.createServer((req, res) => {
     if (harness.valid(key)) return stream(req, res, harness, key);
   }
   res.writeHead(404).end('not found');
-}).listen(PORT, '127.0.0.1', () => console.log(`agents-visualizer → http://localhost:${PORT}\nharness: ${startHarness.label}${startSession ? `\nsession: ${startSession}` : ''}`));
+}).listen(PORT, '127.0.0.1', () => console.log(`agents-visualizer → http://localhost:${PORT}\nharnesses: ${available().map(h => h.label).join(', ')}\nharness: ${startHarness.label}${startSession ? `\nsession: ${startSession}` : ''}`));

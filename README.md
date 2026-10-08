@@ -37,7 +37,7 @@ PORT=5000 node server.js             # uses another port
 CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn't in ~/.claude
 ```
 
-- **Pick a harness** with the first dropdown in the top right, then **pick a session** with the second. It lists that harness's 40 most recent sessions on this computer, labelled by project folder and session id. A harness with no sessions says where it looked.
+- **Pick a harness** with the first dropdown in the top right. It lists only the harnesses installed on this computer: those whose CLI (`claude`, `omp`, `pi`, `opencode`) is on `PATH` or whose data folder exists. `--harness` adds one regardless. Then **pick a session** with the second. It lists that harness's 40 most recent sessions on this computer, labelled by project folder and session id. A harness with no sessions says where it looked.
 - **Live sessions** stream in as Claude Code writes them. Leave the dashboard open while you work in another terminal.
 - **Finished sessions** replay by default (any session quiet for 60 s). Choose 5x, 20x or 100x, or "instant" to load everything at once. Untick "replay" to load without playback.
 - **URL parameters** make a view shareable or scriptable: `?session=<path>&replay=1&speed=20`.
