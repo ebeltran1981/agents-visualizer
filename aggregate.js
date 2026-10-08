@@ -140,7 +140,7 @@ export function ingest(s, id, r) {
       if (t.file) a.files.add(t.file);
       if (/^(edit|write|multiedit|notebookedit)$/i.test(t.name)) a.writes++;
       if (t.name === 'EnterPlanMode') check('plan');
-      if (/^(SubagentHandback|yield)$/.test(t.name)) { a.done = true; a.final = t.input; a.verdict = undefined; }  // a subagent handing back its result
+      if (/^(SubagentHandback|yield)$/.test(t.name)) { a.done = true; a.final = t.input; a.verdict = t.verdict ?? a.verdict; }  // a subagent handing back its result
       row(t.name, t.input, id === 'main' ? '' : `${family(a.model)} · ${a.effort}`);
     }
     if (!r.tools.length) {

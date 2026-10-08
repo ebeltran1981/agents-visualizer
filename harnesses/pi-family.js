@@ -4,6 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { tail, summarize, verdictOf, tilde, every } from './common.js';
 
+// oh-my-pi subagents hand back structured data with yield; PASS/FAIL usually sits in its status or result field.
+const yieldVerdict = x => typeof x?.data === 'string' ? verdictOf(x.data)
+  : [x?.data?.status, x?.data?.result, x?.data?.verdict].map(v => typeof v === 'string' && v.trim().toUpperCase()).find(v => v === 'PASS' || v === 'FAIL');
+
+const yieldText = x => typeof x?.data === 'object' ? { summary: x.data.summary ?? x.data.notes ?? x.data.result, ...x.data } : x;
+
 const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.filter(b => b.type === 'text').map(b => b.text).join('\n') : '';
 
 // Reduce one record to the shared format. ctx carries the session header's cwd and the current thinking level.
@@ -21,7 +27,8 @@ export function slim(o, ctx) {
       cost: c.total == null ? undefined : { total: c.total, in: (c.input ?? 0) + (c.cacheRead ?? 0) + (c.cacheWrite ?? 0) },
       adv: [],
       tools: content.filter(b => b.type === 'toolCall')
-        .map(b => ({ id: b.id, name: b.name, input: b.intent || summarize(b.arguments), file: b.arguments?.path ?? b.arguments?.file_path })),
+        .map(b => ({ id: b.id, name: b.name, input: b.intent || summarize(b.name === 'yield' ? yieldText(b.arguments) : b.arguments), file: b.arguments?.path ?? b.arguments?.file_path,
+                     verdict: b.name === 'yield' ? yieldVerdict(b.arguments) : undefined })),
       text: text.slice(0, 600) || undefined,
       verdict: verdictOf(text),
       error: m.stopReason === 'error' ? (m.errorMessage ?? 'model call failed').replace(/\s*\n\s*/g, ' · ').slice(0, 200) : undefined,

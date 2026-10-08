@@ -8,7 +8,7 @@ export const tilde = p => p?.startsWith(os.homedir()) ? '~' + p.slice(os.homedir
 // One line describing a tool call's input.
 export function summarize(x = {}) {
   const s = x.command ?? x.message ?? x.file_path ?? x.notebook_path ?? x.path ?? x.pattern ?? x.description ?? x.url ?? x.query
-    ?? x.prompt ?? x.skill ?? Object.values(x).find(v => typeof v === 'string') ?? '';
+    ?? x.prompt ?? x.skill ?? x.summary ?? Object.values(x).find(v => typeof v === 'string') ?? '';
   return String(s).split('\n')[0].slice(0, 160);
 }
 
