@@ -36,7 +36,7 @@ const json = s => { try { return JSON.parse(s); } catch { return {}; } };
 function watch(key, push, end) {
   let conn = open();
   const agents = new Map();  // session id → per-agent cursor
-  const follow = (sid, agent) => agents.set(sid, { agent, maxPart: '', pending: new Set(), usage: {}, done: new Set() });
+  const follow = (sid, agent) => agents.set(sid, { agent, maxPart: '', pending: new Set(), usage: {}, cost: {}, done: new Set() });
   follow(key, 'main');
 
   function poll(sid, s, batch) {
@@ -46,7 +46,7 @@ function watch(key, push, end) {
     const parts = q(`SELECT id, message_id, data, time_created FROM part WHERE session_id = ? AND (id > ? OR id IN (SELECT value FROM json_each(?)))
                      ORDER BY id`).all(sid, s.maxPart, JSON.stringify([...s.pending]));
     const a = (m, ts, extra) => ({ t: 'a', ts: iso(ts), id: m.id, model: m.modelID, effort: m.variant, cwd: tilde(m.path?.cwd),
-      u: s.usage[m.id] ?? { in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 }, adv: [], tools: [], ...extra });
+      u: s.usage[m.id] ?? { in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 }, cost: m.id in s.cost ? { total: s.cost[m.id] } : undefined, adv: [], tools: [], ...extra });
 
     for (const p of parts) {
       const d = json(p.data), m = { ...msgs.get(p.message_id), id: p.message_id };
@@ -54,6 +54,7 @@ function watch(key, push, end) {
       if (d.type === 'step-finish') {  // message tokens hold only the last step, so sum the steps
         const t = d.tokens ?? {}, u = s.usage[m.id] ??= { in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 };
         Object.assign(u, { in: u.in + (t.input ?? 0), out: u.out + (t.output ?? 0) + (t.reasoning ?? 0), cr: u.cr + (t.cache?.read ?? 0), cw: u.cw + (t.cache?.write ?? 0) });
+        if (typeof d.cost === 'number') s.cost[m.id] = (s.cost[m.id] ?? 0) + d.cost;  // opencode prices each step itself
       } else if (d.type === 'text' && m.role === 'user' && !d.synthetic && d.text && !s.done.has(p.id)) {
         s.done.add(p.id);
         batch.push({ a: s.agent, r: { t: 'p', ts: iso(p.time_created), text: d.text.trim().slice(0, 200), cwd: tilde(m.path?.cwd) } });

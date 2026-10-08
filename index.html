@@ -152,7 +152,7 @@
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, priced, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
 
 const $ = id => document.getElementById(id);
 const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
@@ -296,8 +296,8 @@ function render() {
   s.subs.forEach(a => updateCard($('subs'), a, now));
 
   const max = Math.max(s.readCost, s.readCostIfMain) || 1;
-  setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>${s.unpricedSubs ? ` · ${s.unpricedSubs} unpriced left out` : ''}`);
-  const subModels = [...new Set(s.subs.filter(priced).map(a => a.model))];
+  setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>${s.unpricedSubs ? ` · ${s.unpricedSubs} left out (no input price)` : ''}`);
+  const subModels = [...new Set(s.readSubs.map(a => a.model))];
   setHTML($('mainLabel'), `on ${esc(shortModel(s.mainModel))}<small>${esc(readRate(s.mainModel))}</small>`);
   setHTML($('actualLabel'), `on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? (priceFor(subModels[0]) ? readRate(subModels[0]) : `cost reported by ${harness.label}`) : subModels.length ? 'mixed rates' : '')}</small>`);
   $('actualBar').style.width = (100 * s.readCost / max) + '%';
