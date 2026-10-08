@@ -58,6 +58,8 @@ export function shortModel(m) {
 }
 
 const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
+// Retried errors differ only in a request id, so compare them without it.
+const errKey = msg => String(msg).replace(/\(ref: [^)]*\)|req_\w+/g, '');
 const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
@@ -85,6 +87,12 @@ export function ingest(s, id, r) {
   const a = agentOf(s, id), rows = [];
   const row = (action, detail, note = '', err = false) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), action, detail, note, err });
   const check = kind => { s.checks[kind]++; s.lastCheck = { kind, ts: a.lastTs }; };
+  const fail = msg => {
+    const seen = s.errs.has(errKey(msg));
+    a.errors++; row('error', msg, seen ? 'again' : '', true);
+    if (seen) { check('repeat'); s.repeatPending = true; }
+    s.errs.add(errKey(msg));
+  };
   a.lastTs = Date.parse(r.ts) || a.lastTs;
   if (r.cwd && id === 'main') s.cwd = r.cwd;
 
@@ -120,13 +128,11 @@ export function ingest(s, id, r) {
       a.lastKind = r.text ? 'text' : 'thinking';
       if (r.text) { a.final = r.text; a.verdict = r.verdict; row('says', r.text.split('\n').find(Boolean)); }
     }
+    // a model call that failed outright (say, a retired model) ends the agent unless a later turn succeeds
+    if (r.error) { fail(r.error); Object.assign(a, { lastKind: 'text', final: r.error, verdict: 'FAIL' }); }
   } else if (r.t === 'r') {
     a.lastKind = 'result';
-    for (const x of r.results.filter(x => x.err)) {
-      a.errors++; row('error', x.msg, s.errs.has(x.msg) ? 'again' : '', true);
-      if (s.errs.has(x.msg)) { check('repeat'); s.repeatPending = true; }
-      s.errs.add(x.msg);
-    }
+    for (const x of r.results.filter(x => x.err)) fail(x.msg);
   } else if (r.t === 'p') {
     if (id === 'main' && a.lastKind === 'text') check('done');
     a.lastKind = 'prompt';

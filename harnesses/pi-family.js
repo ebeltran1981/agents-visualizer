@@ -24,6 +24,7 @@ export function slim(o, ctx) {
         .map(b => ({ id: b.id, name: b.name, input: b.intent || summarize(b.arguments), file: b.arguments?.path ?? b.arguments?.file_path })),
       text: text.slice(0, 600) || undefined,
       verdict: verdictOf(text),
+      error: m.stopReason === 'error' ? (m.errorMessage ?? 'model call failed').replace(/\s*\n\s*/g, ' · ').slice(0, 200) : undefined,
     };
   }
   if (m.role === 'toolResult') {
