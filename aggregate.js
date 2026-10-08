@@ -72,13 +72,13 @@ const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
 const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
-  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, errs: new Set(), cwd: '', advCalls: 0 };
+  return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', advCalls: 0 };
 }
 
 function agentOf(s, id) {
   if (!s.agents.has(id)) s.agents.set(id, {
     id, n: s.agents.size, type: id === 'main' ? 'main' : 'agent', desc: '', model: '', effort: '', advisor: '',
-    u: zero(), usage: new Map(), files: new Set(), tools: 0, errors: 0, lastKind: '', activity: null, final: '', lastTs: 0,
+    u: zero(), usage: new Map(), files: new Set(), tools: 0, writes: 0, errors: 0, lastKind: '', activity: null, final: '', lastTs: 0,
   });
   return s.agents.get(id);
 }
@@ -94,7 +94,8 @@ export function ingestMeta(s, id, meta) {
 // Apply one slimmed record; returns new log rows.
 export function ingest(s, id, r) {
   const a = agentOf(s, id), rows = [];
-  const row = (action, detail, err = false) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), action, detail, err });
+  const row = (action, detail, note = '', err = false) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), action, detail, note, err });
+  const check = kind => { s.checks[kind]++; s.lastCheck = { kind, ts: a.lastTs }; };
   a.lastTs = Date.parse(r.ts) || a.lastTs;
   if (r.cwd && id === 'main') s.cwd = r.cwd;
 
@@ -109,9 +110,10 @@ export function ingest(s, id, r) {
     for (const t of r.tools) {
       a.tools++; a.lastKind = 'tool'; a.activity = t;
       if (t.file) a.files.add(t.file);
-      if (t.name === 'EnterPlanMode') s.checks.plan++;
+      if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t.name)) a.writes++;
+      if (t.name === 'EnterPlanMode') check('plan');
       if (t.name === 'SubagentHandback') { a.done = true; a.final = t.input; }
-      row(t.name, t.input);
+      row(t.name, t.input, id === 'main' ? '' : `${family(a.model)} · ${a.effort}`);
     }
     if (!r.tools.length) {
       a.lastKind = r.text ? 'text' : 'thinking';
@@ -120,12 +122,12 @@ export function ingest(s, id, r) {
   } else if (r.t === 'r') {
     a.lastKind = 'result';
     for (const x of r.results.filter(x => x.err)) {
-      a.errors++; row('error', x.msg, true);
-      if (s.errs.has(x.msg)) s.checks.repeat++;
+      a.errors++; row('error', x.msg, s.errs.has(x.msg) ? 'again' : '', true);
+      if (s.errs.has(x.msg)) check('repeat');
       s.errs.add(x.msg);
     }
   } else if (r.t === 'p') {
-    if (id === 'main' && a.lastKind === 'text') s.checks.done++;
+    if (id === 'main' && a.lastKind === 'text') check('done');
     a.lastKind = 'prompt';
     row(id === 'main' ? 'prompt' : 'task', r.text);
   }

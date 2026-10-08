@@ -9,20 +9,24 @@
   :root {
     --bg: #0b0d0c; --panel: #121513; --line: #232823; --text: #d7ded6; --dim: #7c867b;
     --lime: #b6f36a; --cyan: #6ad8f3; --amber: #f3c76a; --pink: #f36ad8; --red: #f36a6a;
+    --serif: "Instrument Serif", "Iowan Old Style", Georgia, "Times New Roman", serif;
     font: 13px/1.45 ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); padding: 20px 24px 64px; }
   header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
-  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.5px; }
-  h1 b { color: var(--lime); }
+  .kicker { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 2px 0 4px; font: 400 40px/1.05 var(--serif); letter-spacing: -.5px; }
+  h1 em { color: var(--lime); }
   .sub, .dim { color: var(--dim); }
+  .sub b { font-weight: 600; color: var(--c, var(--text)); }
   .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: end; }
   select { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px; font: inherit; max-width: 420px; }
   label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
   input { accent-color: var(--lime); }
-  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 24px 0 8px; font-weight: 500; }
-  .row { display: grid; grid-template-columns: 2fr 72px 1fr; }
+  h2 { display: flex; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 24px 0 8px; font-weight: 500; }
+  h2 span { text-transform: none; letter-spacing: 0; }
+  .row { display: grid; grid-template-columns: 1.3fr 64px 1fr; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
   .row > *, .grid > * { min-width: 0; }
   .card { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--c, var(--lime)); padding: 12px 14px;
@@ -30,20 +34,36 @@
   .card[data-state=working] { box-shadow: 0 0 0 1px var(--c, var(--lime)), 0 0 18px -6px var(--c, var(--lime)); }
   .card[data-state=idle], .card[data-state=done] { opacity: .72; }
   .card[data-state=FAIL] { --c: var(--red); }
-  .top { display: flex; justify-content: space-between; gap: 8px; }
-  .model { color: var(--c, var(--lime)); font-weight: 600; }
+  .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .top > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .model { color: var(--c, var(--lime)); font-weight: 600; font-size: 15px; }
+  .tag { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim); margin-left: 6px; }
+  .price { color: var(--dim); font-size: 12px; white-space: nowrap; }
   .badge { font-size: 11px; padding: 1px 7px; border: 1px solid currentColor; border-radius: 9px; transition: color .4s; white-space: nowrap; display: inline-block; }
   [data-state=working] .badge { color: var(--c, var(--lime)); animation: pulse 1.4s infinite; }
   [data-state=PASS] .badge { color: var(--lime); } [data-state=FAIL] .badge { color: var(--red); }
   [data-state=idle] .badge, [data-state=done] .badge { color: var(--dim); }
   @keyframes pulse { 50% { opacity: .45; } }
   .desc, .act { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .act { margin: 8px 0 6px; } .act i { color: var(--c, var(--lime)); font-style: normal; }
+  .desc { margin-top: 4px; }
+  .effort { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 12px; margin: 8px 0; }
+  .seg { display: inline-flex; gap: 2px; } .seg b { width: 12px; height: 6px; background: var(--line); transition: background .4s; }
+  .seg b.on { background: var(--c, var(--lime)); }
+  .ro { border: 1px solid var(--line); padding: 0 5px; font-size: 10px; letter-spacing: 1px; }
+  .ro:empty { display: none; }
+  .act { margin: 6px 0; } .act i { color: var(--c, var(--lime)); font-style: normal; }
   .stats { display: flex; gap: 14px; flex-wrap: wrap; color: var(--dim); font-size: 12px; }
   .stats b { color: var(--text); font-weight: 500; }
   .err { color: var(--red); }
-  .dots { letter-spacing: 2px; color: var(--c, var(--lime)); }
-  .checks { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin-top: 8px; font-size: 12px; }
+  /* advisor checkpoints */
+  .pills { display: flex; gap: 6px; margin: 10px 0 8px; flex-wrap: wrap; }
+  .pill { flex: 1; border: 1px solid var(--line); padding: 4px 8px; font-size: 11px; color: var(--dim); white-space: nowrap; transition: all .4s; }
+  .pill b { display: inline-block; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--dim); text-align: center; line-height: 13px; margin-right: 4px; font-weight: 500; }
+  .pill.on { color: var(--amber); border-color: var(--amber); background: rgba(243,199,106,.08); }
+  .pill.on b { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+  .status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
+  .status i { color: var(--amber); font-style: normal; }
+  .foot { display: flex; justify-content: space-between; gap: 8px; color: var(--dim); font-size: 12px; }
   .note { font-size: 11px; margin-top: 6px; }
   /* connectors: a thin line with a dot that travels when lit */
   .link { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; color: var(--dim); font-size: 11px; padding: 0 6px; }
@@ -51,16 +71,23 @@
   .link b { position: absolute; top: -2px; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--lime); opacity: 0; }
   .delegates { flex-direction: row; margin-top: 16px; padding: 0; }
   .delegates i { flex: 1; }
+  /* read bill */
   .bill { background: var(--panel); border: 1px solid var(--line); padding: 14px; }
-  .bar { display: grid; grid-template-columns: 210px 1fr 90px; gap: 10px; align-items: center; margin: 6px 0; }
+  .bar { display: grid; grid-template-columns: 230px 1fr 130px; gap: 12px; align-items: center; margin: 8px 0; }
+  .bar small { display: block; color: var(--dim); font-size: 11px; }
   .track { height: 14px; background: #1a1e1a; }
   .fill { height: 100%; width: 0; background: var(--lime); transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
-  .fill.main { background: var(--dim); }
-  .x { display: inline-block; color: var(--bg); background: var(--lime); padding: 2px 8px; font-weight: 700; margin-left: 8px; }
+  .fill.main { background: #e8ecdf; }
+  .big { font: 400 34px/1 var(--serif); text-align: right; color: #e8ecdf; }
+  .big.lime { color: var(--lime); }
+  .billfoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; color: var(--dim); font-size: 12px; }
+  .x { display: inline-block; color: var(--bg); background: var(--lime); padding: 2px 8px; font-weight: 700; margin-left: 8px; white-space: nowrap; }
   .x:empty { display: none; }
+  /* log */
   #log { background: var(--panel); border: 1px solid var(--line); height: 300px; overflow-y: auto; padding: 6px 0; scroll-behavior: smooth; }
-  .ln { display: grid; grid-template-columns: 70px 150px 110px 1fr; gap: 10px; padding: 1px 12px; animation: in .5s; }
+  .ln { display: grid; grid-template-columns: 70px 150px 110px 1fr 180px; gap: 10px; padding: 1px 12px; animation: in .5s; }
   .ln span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ln span:last-child { text-align: right; }
   .ln.err { color: var(--red); }
   .day { color: var(--dim); padding: 4px 12px; font-size: 11px; letter-spacing: 1px; }
   #cursor { animation: none; } #cursor b { color: var(--lime); animation: blink 1s steps(1) infinite; }
@@ -70,20 +97,20 @@
   footer { position: fixed; bottom: 0; left: 0; right: 0; background: #070807; border-top: 1px solid var(--line);
            padding: 8px 24px; display: flex; justify-content: space-between; gap: 16px; color: var(--dim); font-size: 12px; }
   footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  footer code { color: var(--lime); }
+  footer code { color: var(--lime); } footer b { color: var(--text); font-weight: 500; }
   .opus { --c: var(--lime); } .sonnet { --c: var(--cyan); } .haiku { --c: var(--amber); } .fable { --c: var(--pink); }
   @media (max-width: 720px) {
     body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { justify-content: start; width: 100%; }
-    #picker { flex: 1 1 100%; min-width: 0; }
+    #picker { flex: 1 1 100%; min-width: 0; } h1 { font-size: 32px; }
     .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
-    .bar { grid-template-columns: 1fr; } .ln { grid-template-columns: 60px 1fr; }
-    .ln span:nth-child(n+3) { grid-column: 1 / -1; } select { max-width: 100%; }
+    .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; }
+    .ln { grid-template-columns: 60px 1fr; } .ln span:nth-child(n+3) { grid-column: 1 / -1; text-align: left; } select { max-width: 100%; }
   }
 </style>
 </head>
 <body>
 <header>
-  <div><h1 id="title">— models, one session</h1><div class="sub" id="roles">connecting…</div></div>
+  <div><div class="kicker">Claude Code · session</div><h1 id="title">— models, <em>one session.</em></h1><div class="sub" id="roles">connecting…</div></div>
   <div class="controls">
     <span class="dim" id="progress"></span>
     <label><input type="checkbox" id="replay"> replay</label>
@@ -96,29 +123,35 @@
   <div id="main"></div>
   <div class="link asks" id="asks"><span>asks →</span><i><b></b></i></div>
   <div class="card" id="advisor" data-state="idle">
-    <div class="top"><span><span class="model" id="advModel">no advisor</span> <span class="dim">advisor</span></span><span class="badge" id="advCalls"></span></div>
-    <div class="checks"><span>before plan</span><b id="ckPlan"></b><span>same error twice</span><b id="ckRepeat"></b><span>before done</span><b id="ckDone"></b></div>
-    <div class="dim note">checkpoint moments detected in the transcript; advisor calls themselves aren't logged there</div>
+    <div class="top"><span><span class="model" id="advModel">no advisor</span><span class="tag">advisor</span></span><span class="price" id="advPrice"></span></div>
+    <div class="pills">
+      <span class="pill" id="ckPlan"><b>1</b>before the plan</span>
+      <span class="pill" id="ckRepeat"><b>2</b>same error twice</span>
+      <span class="pill" id="ckDone"><b>3</b>before "done"</span>
+    </div>
+    <div class="status" id="advStatus"></div>
+    <div class="foot"><span id="advQuiet"></span><span>calls <b id="advCalls"></b></span></div>
+    <div class="dim note">checkpoints inferred from the transcript · advisor calls themselves aren't logged there</div>
   </div>
 </div>
 <div class="link delegates" id="delegates"><span>delegates ↓</span><i><b></b></i></div>
 <h2>Subagents</h2>
 <div class="grid" id="subs"></div>
 
-<h2>Read bill <span class="dim" id="readTokens"></span></h2>
+<h2>The read bill <span id="readTokens"></span></h2>
 <div class="bill">
-  <div class="bar"><span id="actualLabel">actual</span><div class="track"><div class="fill" id="actualBar"></div></div><b id="actualCost"></b></div>
-  <div class="bar"><span id="mainLabel">if on main model</span><div class="track"><div class="fill main" id="mainBar"></div></div><b id="mainCost"></b></div>
-  <div class="dim" style="margin-top:6px">session total <b id="total"></b> vs <b id="totalIfMain"></b> if all on main model <span class="x" id="ratio"></span> <span id="unpriced"></span></div>
+  <div class="bar"><span id="mainLabel"></span><div class="track"><div class="fill main" id="mainBar"></div></div><div class="big" id="mainCost"></div></div>
+  <div class="bar"><span id="actualLabel"></span><div class="track"><div class="fill" id="actualBar"></div></div><div class="big lime" id="actualCost"></div></div>
+  <div class="billfoot"><span>same tokens × list price · session total <b id="total"></b> vs <b id="totalIfMain"></b> if all on the main model <span id="unpriced"></span></span><span class="x" id="ratio"></span></div>
 </div>
 
-<h2>Session log</h2>
+<h2>Session log <span id="logCwd"></span></h2>
 <div id="log"><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
 
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, EFFORT, cost, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, EFFORT, cost, readTokens } from './aggregate.js';
 
 const $ = id => document.getElementById(id);
 const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
@@ -126,9 +159,14 @@ const fmtK = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).t
 const fmtN = n => String(Math.round(n));
 const time = ts => new Date(ts).toLocaleTimeString([], { hour12: false });
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-const dots = e => '●'.repeat(EFFORT[e] ?? 0) + '○'.repeat(5 - (EFFORT[e] ?? 0));
 const cssVar = (name, el = document.documentElement) => getComputedStyle(el).getPropertyValue(name).trim();
 const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
+const setHTML = (el, v) => { if (el._html !== v) el.innerHTML = el._html = v; };
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
+const rate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
+const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · TODO in aggregate.js'; };
+const READ_ONLY = ['Explore', 'Plan'];
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
 
 let state, es, queue, metaStash, replaying, vt, played, lastRecord, dirty;
@@ -175,11 +213,14 @@ function flash(el, st) {
 function makeCard(id) {
   const el = document.createElement('div');
   el.dataset.id = id;
-  el.innerHTML = `<div class="top"><span><span class="model" data-k="model"></span> <span class="dim" data-k="label"></span></span><span class="badge" data-k="state"></span></div>
-    <div class="desc dim" data-k="desc"></div><div class="act" data-k="act"></div>
-    <div class="stats"><span class="dots" data-k="dots"></span><span><b data-k="files"></b> files</span><span><b data-k="tools"></b> tools</span>
+  el.innerHTML = `<div class="top"><span><span class="model" data-k="model"></span><span class="tag" data-k="label"></span></span><span class="price" data-k="price"></span></div>
+    <div class="desc" data-k="desc"></div>
+    <div class="effort">effort <i class="seg">${'<b></b>'.repeat(5)}</i> <span data-k="effort"></span> <span class="ro" data-k="ro"></span></div>
+    <div class="act"><span class="badge" data-k="state"></span> <span data-k="act"></span></div>
+    <div class="stats"><span><b data-k="files"></b> files</span><span><b data-k="tools"></b> tools</span>
       <span><b data-k="out"></b> out / <b data-k="in"></b> in</span><span><b data-k="cost"></b></span><span class="err" data-k="err"></span></div>`;
   el.k = Object.fromEntries([...el.querySelectorAll('[data-k]')].map(x => [x.dataset.k, x]));
+  el.segs = [...el.querySelectorAll('.seg b')];
   return el;
 }
 
@@ -190,18 +231,20 @@ function updateCard(parent, a, now) {
   const k = el.k, st = stateOf(a, now), [sym, v] = verb(a);
   el.className = `card ${family(a.model)}`;
   setText(k.model, shortModel(a.model));
-  setText(k.label, label(a));
+  setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
+  setText(k.price, rate(a.model));
   setText(k.state, st);
-  setText(k.desc, a.desc || (a.id === 'main' ? state.cwd : ''));
-  k.dots.title = `effort ${a.effort}`;
-  setText(k.dots, dots(a.effort));
+  setText(k.desc, a.desc || (a.id === 'main' ? `leads the session in ${basename(state.cwd)}` : ''));
+  setText(k.effort, a.effort || '—');
+  el.segs.forEach((b, i) => b.classList.toggle('on', i < (EFFORT[a.effort] ?? 0)));
+  setText(k.ro, READ_ONLY.includes(a.type) ? 'read-only' : '');
   setText(k.err, a.errors ? `${a.errors} err` : '');
   tween(k.files, a.files.size, fmtN);
   tween(k.tools, a.tools, fmtN);
   tween(k.out, a.u.out, fmtK);
   tween(k.in, readTokens(a.u), fmtK);
   tween(k.cost, cost(a.model, a.u), fmt$);
-  const act = ['done', 'PASS', 'FAIL'].includes(st) ? `<i>✓</i> <span class="dim">${esc(a.final.split('\n').find(Boolean))}</span>`
+  const act = ['done', 'PASS', 'FAIL'].includes(st) ? `<span class="dim">${esc(a.final.split('\n').find(Boolean))}</span>`
     : a.activity ? `<i>${sym}</i> ${esc(v)} <span class="dim">${esc(a.activity.input)}</span>` : '<span class="dim">waiting…</span>';
   if (el._act !== act) {
     k.act.innerHTML = el._act = act;
@@ -214,28 +257,42 @@ function updateCard(parent, a, now) {
 }
 
 const clock = () => replaying ? vt : Date.now();
+const CHECK_TEXT = { plan: 'plan checkpoint · before the plan', repeat: 'same error twice · would ask the advisor', done: 'turn ended · before "done"' };
 
 function render() {
   const now = clock(), s = summary(state);
-  $('title').innerHTML = `<b>${s.models.length || '—'}</b> model${s.models.length === 1 ? '' : 's'}, one session`;
-  const roles = s.main ? [`${shortModel(s.main.model)} leads`] : [];
-  if (s.main?.advisor) roles.push(`${shortModel(s.main.advisor)} advises`);
-  for (const [m, list] of Object.entries(Object.groupBy(s.subs, a => shortModel(a.model))))
-    roles.push(`${m} runs ${list.length} subagent${list.length > 1 ? 's' : ''}`);
-  setText($('roles'), roles.join(' · ') || 'waiting for transcript…');
+  const n = s.models.length;
+  setHTML($('title'), `${WORDS[n] ?? n} model${n === 1 ? '' : 's'}, <em>one session.</em>`);
+  // One verb per model family: opus plans · sonnet edits · haiku reads · fable reviews
+  const roles = {};
+  const add = (m, verb) => m && (roles[family(m)] ??= new Set()).add(verb);
+  add(s.main?.model, 'plans');
+  s.subs.forEach(a => add(a.model, a.writes ? 'edits' : 'reads'));
+  add(s.main?.advisor, 'reviews');
+  setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${f}">${f}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || 'waiting for transcript…');
 
   if (s.main) updateCard($('main'), s.main, now);
-  const adv = s.main?.advisor, c = state.checks, calls = `${state.advCalls} calls`;
+  const adv = s.main?.advisor, c = state.checks, lc = state.lastCheck;
   $('advisor').className = `card ${family(adv)}`;
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
+  setText($('advPrice'), adv ? rate(adv) : '');
+  for (const [id, kind] of [['ckPlan', 'plan'], ['ckRepeat', 'repeat'], ['ckDone', 'done']]) {
+    const el = $(id), on = c[kind] > 0;
+    if (on !== el.classList.contains('on')) { el.classList.toggle('on', on); if (on) pop(el); }
+    setText(el.querySelector('b'), on ? String(c[kind]) : el.dataset.n ??= el.querySelector('b').textContent);
+  }
+  setHTML($('advStatus'), lc ? `<i>»</i> ${CHECK_TEXT[lc.kind]}` : '<span class="dim">no checkpoint yet</span>');
+  const recent = lc && now - lc.ts < 60_000;
+  setText($('advQuiet'), recent ? `● checkpoint reached` : `○ quiet until ${family(s.main?.model)} asks`);
+  const calls = String(state.advCalls);
   if ($('advCalls').textContent !== calls) { if ($('advCalls').textContent) pop($('advCalls'), 1.3); $('advCalls').textContent = calls; }
-  tween($('ckPlan'), c.plan, fmtN); tween($('ckRepeat'), c.repeat, fmtN); tween($('ckDone'), c.done, fmtN);
   s.subs.forEach(a => updateCard($('subs'), a, now));
 
   const max = Math.max(s.readCost, s.readCostIfMain) || 1;
-  setText($('readTokens'), `· ${fmtK(s.readTokens)} tokens read by subagents`);
-  setText($('actualLabel'), `actual (${[...new Set(s.subs.map(a => shortModel(a.model)))].join(', ') || '—'})`);
-  setText($('mainLabel'), `if on ${shortModel(s.mainModel)}`);
+  setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>`);
+  const subModels = [...new Set(s.subs.map(a => a.model).filter(Boolean))];
+  setHTML($('mainLabel'), `on ${esc(shortModel(s.mainModel))}<small>${esc(readRate(s.mainModel))}</small>`);
+  setHTML($('actualLabel'), `on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? readRate(subModels[0]) : subModels.length ? 'mixed rates' : '')}</small>`);
   $('actualBar').style.width = (100 * s.readCost / max) + '%';
   $('mainBar').style.width = (100 * s.readCostIfMain / max) + '%';
   tween($('actualCost'), s.readCost, fmt$);
@@ -243,16 +300,18 @@ function render() {
   tween($('total'), s.cost, fmt$);
   tween($('totalIfMain'), s.costIfMain, fmt$);
   const x = s.readCost ? s.readCostIfMain / s.readCost : 0;
-  const ratio = !x ? '' : x >= 1.05 ? x.toFixed(1) + 'x less' : 'same price';
+  const ratio = !x ? '' : x >= 1.05 ? x.toFixed(1) + '× less' : 'same price';
   if ($('ratio').textContent !== ratio) { $('ratio').textContent = ratio; if (ratio) pop($('ratio')); }
   setText($('unpriced'), s.unpriced.length ? `· no price for ${s.unpriced.join(', ')} (TODO in aggregate.js)` : '');
+  setText($('logCwd'), basename(state.cwd));
 
-  $('cmd').innerHTML = s.main ? `${esc(state.cwd)} <code>$ claude --model ${esc(s.main.model)} --effort ${esc(s.main.effort)}</code> <span class="dim">(reconstructed)</span>` : '';
-  const counts = {};
-  s.subs.forEach(a => { const st = stateOf(a, now); counts[st] = (counts[st] ?? 0) + 1; });
-  const efforts = [...new Set(s.subs.map(a => a.effort).filter(Boolean))].join('/');
-  setText($('effortSummary'), `effort main ${s.main?.effort || '—'}${efforts ? ` · subs ${efforts}` : ''} · ${s.subs.length} subagents`
-    + (s.subs.length ? ` (${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')})` : ''));
+  const subFams = [...new Set(s.subs.map(a => family(a.model)))].join(' + ');
+  $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ claude --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
+  $('cmd').title = 'reconstructed from the transcript';
+  const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');
+  setHTML($('effortSummary'), s.main ? `effort <b>${esc(efforts)}</b> · subagents <b>${s.subs.length}</b>`
+    + (adv ? ` · advisor <b>${esc(family(adv))}</b> [${recent ? 'reviewing' : 'quiet'}]` : '')
+    + (subFams ? ` · ${esc(subFams)} read <b>${fmtK(s.readTokens)}</b>` : '') : '');
 
   $('cursor').hidden = !(replaying || Date.now() - lastRecord < 60_000);
   setText($('progress'), replaying ? `▶ ${speed}x · ${played}/${played + queue.length} events` : '');
@@ -277,7 +336,7 @@ function appendLog(rows) {
     const el = document.createElement('div');
     el.className = `ln ${r.fam}` + (r.err ? ' err' : '');
     el.title = r.ts;
-    el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span>`;
+    el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span><span class="dim">${esc(r.note)}</span>`;
     log.insertBefore(el, $('cursor'));
   }
   while (log.children.length > 600) log.firstChild.remove();
