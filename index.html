@@ -164,7 +164,7 @@ const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
 const setHTML = (el, v) => { if (el._html !== v) el.innerHTML = el._html = v; };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
 const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
-const rate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
+const rate = m => { if (!m) return ''; const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
 const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · TODO in aggregate.js'; };
 const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
@@ -230,7 +230,7 @@ function updateCard(parent, a, now) {
   if (fresh) parent.append(el = makeCard(a.id));
   const k = el.k, st = stateOf(a, now), [sym, v] = verb(a);
   el.className = `card ${family(a.model)}`;
-  setText(k.model, shortModel(a.model));
+  setText(k.model, a.model ? shortModel(a.model) : 'starting…');
   setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
   setText(k.price, rate(a.model));
   setText(k.state, st);
@@ -310,7 +310,7 @@ function render() {
   setText($('unpriced'), s.unpriced.length ? `· no price for ${s.unpriced.join(', ')} (TODO in aggregate.js)` : '');
   setText($('logCwd'), basename(state.cwd));
 
-  const subFams = [...new Set(s.subs.map(a => family(a.model)))].join(' + ');
+  const subFams = [...new Set(s.subs.filter(a => a.model).map(a => family(a.model)))].join(' + ');
   $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ claude --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
   $('cmd').title = 'reconstructed from the transcript';
   const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');
