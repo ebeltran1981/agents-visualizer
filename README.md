@@ -2,9 +2,9 @@
 
 Live dashboard of one coding-agent session: the main agent, its advisor and its subagents, with the model each one runs, what it is doing, token use and cost. Pick the agent harness from a dropdown.
 
-![Four models, one session: an Opus 5.5 main agent with a Fable 5.1 advisor and 10 Haiku 5.5 and Sonnet 5.5 subagents](docs/demo.png)
+![Four models, one session: an Opus 5.5 main agent with a Fable 5.1 advisor and 10 Haiku 4.5 and Sonnet 5.5 subagents](docs/demo.png)
 
-*A real run: Opus 5.5 plans and reviews, Fable 5.1 advises three times, and 10 subagents (Haiku 5.5 reads and reviews, Sonnet 5.5 edits) build a small library in 3m54s for $2.99. The five Haiku 5.5 subagents cost $0.016 together.*
+*A real run: Opus 5.5 plans and reviews, Fable 5.1 advises at two checkpoints, and 10 subagents (Haiku 4.5 reads, Sonnet 5.5 edits) build a small library in 4m46s for $3.11.*
 
 It only reads the session files each harness already writes, and never writes into them.
 
@@ -42,13 +42,6 @@ CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn
 - **Finished sessions** replay by default (any session quiet for 60 s). Choose 5x, 20x or 100x, or "instant" to load everything at once. Untick "replay" to load without playback.
 - **URL parameters** make a view shareable or scriptable: `?session=<path>&replay=1&speed=20`.
 
-**On Windows**, the commands are the same in PowerShell, except environment variables, which use `$env:`. Session files are read from the same places under `%USERPROFILE%` (for example `%USERPROFILE%\.claude\projects`). So far the Windows support has only been checked with Windows-style paths on Linux, not on a Windows computer.
-
-```powershell
-$env:PORT=5000; node server.js
-$env:CLAUDE_CONFIG_DIR="D:\claude-config"; node server.js
-```
-
 What the dashboard shows:
 
 | Panel | Meaning |
@@ -71,7 +64,7 @@ The dashboard is most useful when a session mixes models. In the project you are
    ---
    name: explorer
    description: Read-only. Searches and reads the codebase and reports what it found.
-   model: claude-haiku-5-5
+   model: claude-haiku-4-5
    tools: Read, Grep, Glob
    ---
 
@@ -98,13 +91,9 @@ The two numbers are the session cost and what it would cost if every agent ran o
 { "statusLine": { "type": "command", "command": "node /path/to/agents-visualizer/statusline.js" } }
 ```
 
-On Windows, write the path with forward slashes, for example `node C:/Users/me/agents-visualizer/statusline.js`, so it needs no escaping in JSON.
-
 ## Prices
 
 Costs come from the `PRICES` table at the top of `aggregate.js`: Anthropic list prices in USD per 1M tokens (input, output, cache read, 5-minute cache write).
-
-Haiku 5.5 costs more for prompts over 100,000 tokens ($0.50 / $2.50 instead of $0.10 / $0.50). The dashboard prices each request by its own prompt size: input plus cache reads and writes.
 
 For your own rates or other models, copy `prices.local.example.json` to `prices.local.json` next to `server.js`. Git ignores that file, so company rates never reach the repo. Entries there take precedence over `PRICES`, and the dashboard and the status line both read it. Reload the page after editing it.
 
@@ -120,7 +109,6 @@ The example below uses placeholder rates; replace them with yours.
 
 - Keys match model IDs as they appear in the transcripts, by prefix.
 - `in` and `out` are required. `cacheRead` and `cacheWrite` default to `in`.
-- `long` sets the prices for requests whose prompt is over 100,000 tokens, with the same fields, as `PRICES` does for Haiku 5.5.
 - `label` changes the name on the cards, and `family` changes the name used in the header and footer.
 - If the file isn't valid JSON, the server logs why in its terminal and ignores it.
 
@@ -130,7 +118,8 @@ A model with no price shows `?`. Its tokens are left out of both sides of every 
 
 The dashboard reads the transcripts Claude Code writes on your computer, so it works the same whether Claude Code talks to Anthropic directly or through a company gateway.
 
-- **Provider prefixes and suffixes are stripped** before matching prices and names, so `us.anthropic.claude-opus-5-5-v1:0` and `claude-haiku-4-5@20251001` are recognised as Opus 5.5 and Haiku 4.5.
+- **Provider prefixes and suffixes are stripped** before matching prices and names, so `global.anthropic.claude-sonnet-5-5`, `us.anthropic.claude-opus-5-5-v1:0` and `claude-haiku-4-5@20251001` are recognised as Sonnet 5.5, Opus 5.5 and Haiku 4.5.
+- **Haiku 5.5 is billed by prompt length.** A request whose prompt is over 100,000 tokens costs 5x the listed rates. The dashboard prices an agent's totals at the base rate, so a Haiku card can understate its cost.
 - **Non-Claude models** appear under their own name (for example "gpt-5 edits"), in a neutral colour, and need an entry in `prices.local.json` to be priced.
 - **The advisor is a server-side Anthropic tool.** Without an advisor, the card reads "no advisor" and counts 0 calls, but the checkpoint pills still light from plan mode, repeated errors and turn ends. Whether the advisor works through your gateway depends on its backend.
 
@@ -149,10 +138,11 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 
 - Usage is counted once per API message, because Claude Code repeats `usage` on every content-block line.
 - A subagent counts as **done** when its last message is text-only or it calls `SubagentHandback`. It shows **PASS** or **FAIL** when the last line of its final message is exactly that word. It counts as **idle** after 45 s with no activity.
+- The Claude Code advisor plugin (`/advisor-model`) runs the advisor as a subagent of type `advisor:advisor`. The dashboard treats it as the advisor, not as a subagent: its tokens go to the advisor panel and each finished review counts as one call. While a review runs, the panel shows "reviewing" and the advisor's current action. The plugin writes no `advisorModel` to the transcript, so the panel learns the model from the advisor's first message. A review ends with a reply, an `advise` call, an API error or an interrupt; if the advisor process is killed without one of these, the panel keeps showing "reviewing" for up to 5 minutes.
 - Advisor calls appear in transcripts as a `server_tool_use` block named `advisor`. Their tokens appear only in `usage.iterations` (type `advisor_message`, with the advisor's model), not in the top-level usage, so the dashboard adds them separately at the advisor's price.
 - The checkpoint pills are inferred. A real advisor call lights "before the plan" if no subagent has started yet, "same error twice" if a tool error just repeated, and "before done" if every subagent has finished. `EnterPlanMode`, repeated errors and turn ends also count.
 - The footer's command line is reconstructed from the transcript's model and effort.
-- **oh-my-pi** records the cost of each message itself. The dashboard uses that unless `prices.local.json` has the model. Subagents are named after their file (for example "BackendArch") and get their agent type (for example "scout") once the parent's `task` call returns. They count as done when they call `yield`, and show PASS or FAIL when its data has that status or result. With `--advisor`, the advisor's own transcript (`__advisor.jsonl`) feeds the advisor panel: each finished review is one call. A failed model call (say, a retired model) shows as an error and marks the agent FAIL. Not yet counted: the small cost of omp's automatic thinking-level judge.
+- **oh-my-pi** records the cost of each message itself. The dashboard uses that unless `prices.local.json` has the model. Subagents are named after their file (for example "BackendArch") and get their agent type (for example "scout") once the parent's `task` call returns. They count as done when they call `yield`, and show PASS or FAIL when its data has that status or result. With `--advisor`, the advisor's own transcript (`__advisor.jsonl`) feeds the advisor panel: each finished review is one call. A review ends with an `advise` call (its note becomes the log row) or with a text reply such as "I'm not sending any advice". A failed model call (say, a retired model) shows as an error and marks the agent FAIL. Not yet counted: the small cost of omp's automatic thinking-level judge.
 - **pi** uses the same parser as oh-my-pi. Sessions saved with `--session-dir` or a custom `sessionDir` setting aren't listed. Checked on a real pi 1.1.0 session: its tokens and tool calls match pi's own file exactly. pi records the cost it knows; models added in `~/.pi/agent/models.json` without a `cost` show as $0.00.
 - **opencode** sessions are read from its SQLite database without writing to it. While opencode is running, the dashboard opens the database read-only and sees new rows as they land. Otherwise it opens the file as immutable, so no `-wal` or `-shm` files are created next to it. Costs come from opencode's own per-step pricing unless `prices.local.json` has the model; opencode doesn't split cost into input and output, so its subagents appear in the read bill only when the price table knows their model. Checked on a real 10-subagent run: its token totals match opencode's own session totals exactly.
 - If the server restarts or a session file is rewritten, the page reconnects and rebuilds from scratch, so nothing is counted twice.

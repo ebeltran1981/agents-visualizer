@@ -1,9 +1,7 @@
 // Harness-agnostic aggregation of normalized records (see harnesses/). Used by index.html and statusline.js.
 
 // USD per 1M tokens. cacheWrite = 5-minute TTL write; 1-hour writes are billed at 2x input.
-// `long` applies to requests whose prompt (input + cache reads and writes) is over LONG_PROMPT tokens.
 // Unknown models show "?" instead of a guessed price; add your own in prices.local.json.
-export const LONG_PROMPT = 100_000;
 export const PRICES = {
   'claude-fable-5-1':  { in: 10, out: 50, cacheRead: 0.25, cacheWrite: 12.5 },
   'claude-fable-5':    { in: 10, out: 50, cacheRead: 1.00, cacheWrite: 12.5 },
@@ -11,14 +9,16 @@ export const PRICES = {
   'claude-opus-5':     { in: 5,  out: 25, cacheRead: 0.50, cacheWrite: 6.25 },
   'claude-sonnet-5-5': { in: 2,  out: 10, cacheRead: 0.10, cacheWrite: 2.5 },
   'claude-sonnet-5':   { in: 2,  out: 10, cacheRead: 0.20, cacheWrite: 2.5 },
-  'claude-haiku-5-5':  { in: 0.1, out: 0.5, cacheRead: 0.01, cacheWrite: 0.125,
-                        long: { in: 0.5, out: 2.5, cacheRead: 0.05, cacheWrite: 0.625 } },
+  // Haiku 5.5 bills a request with more than 100k prompt tokens at 5x these rates; per-agent totals cannot show that.
+  'claude-haiku-5-5':  { in: 0.10, out: 0.50, cacheRead: 0.01, cacheWrite: 0.125 },
   'claude-haiku-4-5':  { in: 1,  out: 5,  cacheRead: 0.10, cacheWrite: 1.25 },
   // TODO: older models (opus-4-x, sonnet-4-x) if you replay old sessions.
 };
 
 export const EFFORT = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
 const IDLE_MS = 45_000;
+// An advisor writes nothing while it thinks, so wait longer than IDLE_MS before calling a review stalled.
+const REVIEW_MS = 300_000;
 
 // Company rates and names from prices.local.json; they take precedence over PRICES.
 let LOCAL = {};
@@ -26,28 +26,22 @@ export function setLocalPrices(table = {}) {
   LOCAL = Object.fromEntries(Object.entries(table).map(([id, p]) => [id, { cacheRead: p.in, cacheWrite: p.in, ...p }]));
 }
 
-// Gateways add provider prefixes and version suffixes, e.g. us.anthropic.claude-opus-5-5-v1:0 or claude-haiku-4-5@20251001.
-export const baseModel = m => (m ?? '').replace(/^([a-z]{2,4}\.)?anthropic\./, '').replace(/@.*$/, '').replace(/-v\d+(:\d+)?$/, '').replace(/-\d{8}$/, '');
+// Gateways add provider prefixes and version suffixes, e.g. global.anthropic.claude-sonnet-5-5, us.anthropic.claude-opus-5-5-v1:0 or claude-haiku-4-5@20251001.
+export const baseModel = m => (m ?? '').replace(/^([a-z-]{2,8}\.)?anthropic\./, '').replace(/@.*$/, '').replace(/-v\d+(:\d+)?$/, '').replace(/-\d{8}$/, '');
 
 const lookup = (table, id) => table[Object.keys(table).sort((a, b) => b.length - a.length).find(k => id.startsWith(k))] ?? null;
 const local = m => m ? lookup(LOCAL, m) ?? lookup(LOCAL, baseModel(m)) : null;
 
 export const priceFor = m => m ? local(m) ?? lookup(PRICES, baseModel(m)) : null;
 
-// Usage u keeps long-prompt requests twice: in the totals, and again in u.long (see ingest).
-const inPart = (p, u) => (u.in * p.in + u.cr * p.cacheRead + u.cw * p.cacheWrite + u.cw1h * p.in * 2) / 1e6;
-const outPart = (p, u) => u.out * p.out / 1e6;
-function byTier(model, u, part) {
+export function inputCost(model, u) {
   const p = priceFor(model);
-  if (!p) return null;
-  if (!p.long || !u.long) return part(p, u);
-  const short = Object.fromEntries(Object.keys(u.long).map(f => [f, u[f] - u.long[f]]));
-  return part(p, short) + part(p.long, u.long);
+  return p ? (u.in * p.in + u.cr * p.cacheRead + u.cw * p.cacheWrite + u.cw1h * p.in * 2) / 1e6 : null;
 }
-export const inputCost = (model, u) => byTier(model, u, inPart);
+
 export function cost(model, u) {
   const c = inputCost(model, u);
-  return c == null ? null : c + byTier(model, u, outPart);
+  return c == null ? null : c + (u.out * priceFor(model).out) / 1e6;
 }
 
 // Your local prices first, then the cost the harness reported (pi and its forks record it), then the list price.
@@ -67,15 +61,12 @@ export function shortModel(m) {
   return local(m)?.label ?? (id.startsWith('claude-') ? id.slice(7).replace(/-(\d+)-(\d+)$/, ' $1.$2').replace(/-(\d+)$/, ' $1') : id);
 }
 
-const flat = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
-const zero = () => ({ ...flat(), long: flat() });
-// Copies a request's usage into u.long too when its prompt is over LONG_PROMPT, for long-context prices.
-const tiered = ({ long, ...u }) => u.in + u.cr + u.cw + u.cw1h > LONG_PROMPT ? { ...u, long: u } : u;
+const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
 const paidOf = c => ({ ...c, n: 1, inN: c.in == null ? 0 : 1 });
 
 // Retried errors differ only in a request id, so compare them without it.
 const errKey = msg => String(msg).replace(/\(ref: [^)]*\)|req_\w+/g, '');
-const addU = (a, b, k = 1) => { for (const f in a) if (f === 'long') addU(a.long, b.long ?? {}, k); else a[f] += k * (b[f] ?? 0); };
+const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
   return { agents: new Map(), checks: { plan: 0, repeat: 0, done: 0 }, lastCheck: null, errs: new Set(), cwd: '', repeatPending: false, adv: { model: '', u: zero(), paid: { total: 0, in: 0, n: 0, inN: 0 }, calls: 0, ts: 0, kind: null, lastIn: 0 } };
@@ -83,7 +74,8 @@ export function createState() {
 
 function agentOf(s, id) {
   if (!s.agents.has(id)) s.agents.set(id, {
-    id, n: s.agents.size, type: id === 'main' ? 'main' : 'agent', desc: '', model: '', effort: '', advisor: '',
+    id, n: [...s.agents.values()].filter(b => b.type !== 'advisor').length,  // advisors take no card number
+    type: id === 'main' ? 'main' : 'agent', desc: '', model: '', effort: '', advisor: '',
     u: zero(), paid: { total: 0, in: 0, n: 0, inN: 0 }, usage: new Map(), files: new Set(), tools: 0, writes: 0, errors: 0, lastKind: '', activity: null, final: '', lastTs: 0,
   });
   return s.agents.get(id);
@@ -93,7 +85,7 @@ export const label = a => a.id === 'main' ? 'main' : a.type === 'advisor' ? 'adv
 
 export function ingestMeta(s, id, meta) {
   const a = agentOf(s, id);
-  a.type = meta.agentType ?? a.type;
+  a.type = /(^|:)advisor$/.test(meta.agentType) ? 'advisor' : meta.agentType ?? a.type;  // a plugin's advisor agent is "advisor:advisor"
   a.desc = meta.description ?? a.desc;
 }
 
@@ -110,8 +102,6 @@ export function ingest(s, id, r) {
   };
   a.lastTs = Date.parse(r.ts) || a.lastTs;
   if (r.cwd && id === 'main') s.cwd = r.cwd;
-  if (r.u) r.u = tiered(r.u);
-  r.adv?.forEach(x => { x.u = tiered(x.u); });
   // Map an advisor call to the checkpoint it most likely is.
   const advisorCall = (model, lastIn) => {
     const subs = [...s.agents.values()].filter(b => b.id !== 'main' && b.type !== 'advisor' && b.lastTs);  // spawned, not just announced
@@ -121,17 +111,34 @@ export function ingest(s, id, r) {
     Object.assign(s.adv, { model, ts: a.lastTs, kind, lastIn });
   };
 
-  // oh-my-pi logs its advisor as its own transcript; it feeds the advisor panel, one call per review it finishes.
+  // An advisor that runs as its own transcript (oh-my-pi, the Claude Code advisor plugin) feeds the advisor panel, one call per review it finishes.
   if (a.type === 'advisor') {
+    if (r.t === 'p') {
+      a.reviewing = !r.text.startsWith('[Request interrupted');
+      a.lastKind = 'prompt';
+      if (!a.reviewing) a.activity = null;
+    }
+    if (r.t === 'r') a.lastKind = 'result';  // a result never starts a review: the result of the advise tool comes after it ended
     if (r.t !== 'a' || !r.model) return rows;
+    const failed = r.error || r.model.startsWith('<');  // an API error line, not a review
+    const replied = !failed && r.text && !r.tools.length && !r.partial;
+    const advise = r.tools.find(t => t.name === 'advise');  // oh-my-pi delivers its advice as a note in this tool call
+    if (!failed) { a.model = r.model; s.adv.model ||= r.model; }  // the panel names the model from the first line, before the first call ends
+    for (const t of r.tools) { a.activity = t; a.lastKind = 'tool'; if (t.file) a.files.add(t.file); }
+    if (!r.tools.length) a.lastKind = r.text ? 'text' : 'thinking';
+    // a review ends with a reply, an advise call, an API error or an interrupt
+    a.reviewing = !(failed || replied || advise);
+    if (!a.reviewing) a.activity = null;
     const prev = a.usage.get(r.id);
     if (prev) { addU(s.adv.u, prev.u, -1); if (prev.cost) addU(s.adv.paid, paidOf(prev.cost), -1); }
     addU(s.adv.u, r.u); if (r.cost) addU(s.adv.paid, paidOf(r.cost));
-    a.usage.set(r.id, r);
-    if (!prev && r.text && !r.tools.length) {
+    // Lines of one message share its id, so count the call once per id, on its finished text line.
+    a.usage.set(r.id, { ...r, counted: prev?.counted });
+    if ((replied || advise) && !prev?.counted) {
+      a.usage.get(r.id).counted = true;
       s.adv.calls++;
-      advisorCall(r.model, r.u.in + r.u.cr);
-      row('advisor', r.text.split('\n').find(Boolean), family(r.model));
+      advisorCall(r.model, readTokens(r.u));
+      row('advisor', advise ? advise.input : r.text.split('\n').find(Boolean), family(r.model));
     }
     return rows;
   }
@@ -146,8 +153,8 @@ export function ingest(s, id, r) {
     if (r.cost) addU(a.paid, paidOf(r.cost));
     addU(a.u, r.u); r.adv.forEach(x => addU(s.adv.u, x.u)); s.adv.calls += r.adv.length;
     for (const x of r.adv.slice(prev?.adv.length ?? 0)) {
-      advisorCall(x.model, x.u.in + x.u.cr);
-      row('advisor', `asks ${shortModel(x.model)} · it reads ${Math.round((x.u.in + x.u.cr) / 1000)}k tokens`, family(x.model));
+      advisorCall(x.model, readTokens(x.u));
+      row('advisor', `asks ${shortModel(x.model)} · it reads ${Math.round(readTokens(x.u) / 1000)}k tokens`, family(x.model));
     }
     a.usage.set(r.id, r);
     for (const t of r.tools) {
@@ -183,6 +190,12 @@ export function stateOf(a, now = Date.now()) {
   return a.lastKind !== 'text' && now - a.lastTs < IDLE_MS ? 'working' : 'idle';
 }
 
+// The latest advisor agent, when it is mid-review.
+export function reviewing(s, now = Date.now()) {
+  const last = [...s.agents.values()].filter(a => a.type === 'advisor').sort((x, y) => y.lastTs - x.lastTs)[0];
+  return last?.reviewing && now - last.lastTs < REVIEW_MS ? last : undefined;
+}
+
 // Tool names differ in case across harnesses (Read in Claude Code, read in pi).
 const VERBS = [[/^(read|grep|glob|find|ls)$/i, '▸', 'reading'], [/^(edit|write|multiedit|notebookedit)$/i, '✎', 'editing'],
   [/^bash$/i, '$', 'running'], [/PlanMode/, '●', 'plan'], [/^(agent|task)$/i, '⇢', 'delegating'], [/^web/i, '↯', 'browsing']];
@@ -203,7 +216,7 @@ export function summary(s) {
   const unpriced = [...new Set(all.filter(a => !priced(a)).map(a => a.model).concat(s.adv.calls && advCost == null ? advModel : []).filter(Boolean))];
   return {
     main, subs, mainModel, advModel, unpriced, partial: unpriced.length > 0, readSubs: pricedSubs, unpricedSubs: subs.length - pricedSubs.length,
-    models: [...new Set(all.map(a => a.model).concat(advModel ?? []).filter(Boolean))],
+    models: [...new Set(all.map(a => a.model).concat(advModel ?? []).filter(Boolean).map(baseModel))],
     advCost,
     cost: sum(pricedAll, agentCost) + (advCost ?? 0),
     costIfMain: mainPriced ? sum(pricedAll, a => cost(mainModel, a.u)) + (advCost != null ? cost(mainModel, s.adv.u) : 0) : null,

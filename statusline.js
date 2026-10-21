@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createState, ingest, ingestMeta, summary, stateOf, verb, family, setLocalPrices } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, reviewing, verb, family, setLocalPrices } from './aggregate.js';
 import { slim } from './harnesses/claude.js';
 
 // Optional company rates and names, same file the dashboard uses.
@@ -34,7 +34,7 @@ const part = a => {
   return `${family(a.model)} ${sym} ${v === 'reading' ? `${a.files.size} files` : v}`;
 };
 const active = sum.subs.filter(a => stateOf(a) === 'working');
-const parts = [sum.main && part(sum.main), ...active.slice(0, 3).map(part)].filter(Boolean);
+const parts = [sum.main && part(sum.main), reviewing(s) && part(reviewing(s)), ...active.slice(0, 3).map(part)].filter(Boolean);
 if (active.length > 3) parts.push(`+${active.length - 3}`);
 const money = n => n == null ? '?' : (sum.partial ? '≥$' : '$') + n.toFixed(2);
 console.log(`${parts.join(' · ')} │ ${money(sum.cost)} vs ${money(sum.costIfMain)}`);

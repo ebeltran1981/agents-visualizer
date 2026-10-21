@@ -152,10 +152,10 @@
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, stateOf, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
 
 const $ = id => document.getElementById(id);
-const fmt$ = n => n == null ? '?' : '$' + (n > 0 && n < 0.01 ? n.toFixed(3) : n < 10 ? n.toFixed(2) : n.toFixed(1));  // 3 decimals below a cent
+const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
 const fmtK = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
 const fmtN = n => String(Math.round(n));
 const time = ts => new Date(ts).toLocaleTimeString([], { hour12: false });
@@ -164,9 +164,9 @@ const cssVar = (name, el = document.documentElement) => getComputedStyle(el).get
 const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
 const setHTML = (el, v) => { if (el._html !== v) el.innerHTML = el._html = v; };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
-const basename = p => p?.split(/[\\/]/).filter(Boolean).pop() ?? '';
+const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
 const rate = m => { if (!m) return ''; const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
-const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M${p.long ? ', prompts ≤100K' : ''}` : 'no price · add it to prices.local.json'; };
+const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · add it to prices.local.json'; };
 const tint = f => CLAUDE_FAMILIES.includes(f) ? f : 'other';  // non-Claude models get a neutral colour
 const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
@@ -275,8 +275,9 @@ function render() {
   setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${tint(f)}">${esc(f)}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || emptyMsg || 'waiting for transcript…');
 
   if (s.main) updateCard($('main'), s.main, now);
-  const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv;
+  const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv, rev = reviewing(state, now);
   $('advisor').className = `card ${tint(family(adv))}`;
+  $('advisor').dataset.state = rev ? 'working' : 'idle';
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
   setText($('advPrice'), !adv ? '' : priceFor(adv) ? rate(adv) : state.adv.paid.n ? 'reported cost' : rate(adv));
   for (const [id, kind] of [['ckPlan', 'plan'], ['ckRepeat', 'repeat'], ['ckDone', 'done']]) {
@@ -286,11 +287,15 @@ function render() {
   }
   // the latest of an actual advisor call or an inferred checkpoint drives the status line
   const called = call.calls && call.ts >= (lc?.ts ?? 0);
-  setHTML($('advStatus'), called ? `<i>»</i> ${esc(family(s.main?.model))} asked ${ASK_TEXT[call.kind] ?? 'mid-run'} · read ${fmtK(call.lastIn)} tokens`
+  const [rsym, rverb] = rev ? verb(rev) : [];
+  const doing = rev?.activity ? `<i>${rsym}</i> ${esc(rverb)} <span class="dim">${esc(rev.activity.input)}</span>` : '<span class="dim">starting…</span>';
+  setHTML($('advStatus'), rev ? `<i>»</i> ${esc(family(rev.model || adv))} reviewing · ${doing}`
+    : called ? `<i>»</i> ${esc(family(s.main?.model))} asked ${ASK_TEXT[call.kind] ?? 'mid-run'} · read ${fmtK(call.lastIn)} tokens`
     : lc ? `<i>»</i> ${CHECK_TEXT[lc.kind]}` : '<span class="dim">no checkpoint yet</span>');
   const recent = now - Math.max(lc?.ts ?? 0, call.ts) < 60_000;
-  setText($('advQuiet'), recent ? (called ? '● reviewing' : '● checkpoint reached') : `○ quiet until ${family(s.main?.model)} asks`);
-  setText($('advSpend'), call.calls ? `${fmtK(readTokens(call.u))} read · ${fmt$(s.advCost)}` : '');
+  const advState = rev ? 'reviewing' : !recent ? 'quiet' : called ? 'replied' : 'checkpoint';
+  setText($('advQuiet'), { reviewing: '● reviewing', replied: '● replied', checkpoint: '● checkpoint reached', quiet: `○ quiet until ${family(s.main?.model)} asks` }[advState]);
+  setText($('advSpend'), call.calls || rev ? `${fmtK(readTokens(call.u))} read · ${fmt$(s.advCost)}` : '');
   const calls = String(call.calls);
   if ($('advCalls').textContent !== calls) { if ($('advCalls').textContent) pop($('advCalls'), 1.3); $('advCalls').textContent = calls; }
   s.subs.forEach(a => updateCard($('subs'), a, now));
@@ -318,7 +323,7 @@ function render() {
   $('cmd').title = 'reconstructed from the transcript';
   const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');
   setHTML($('effortSummary'), s.main ? `effort <b>${esc(efforts)}</b> · subagents <b>${s.subs.length}</b>`
-    + (adv ? ` · advisor <b>${esc(family(adv))}</b> [${recent ? 'reviewing' : 'quiet'}]` : '')
+    + (adv ? ` · advisor <b>${esc(family(adv))}</b> [${advState}]` : '')
     + (subFams ? ` · ${esc(subFams)} read <b>${fmtK(s.readTokens)}</b>` : '') : '');
 
   $('cursor').hidden = !(replaying || Date.now() - lastRecord < 60_000);

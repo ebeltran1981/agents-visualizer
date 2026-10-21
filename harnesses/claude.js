@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde, every, installed, inside, cwdOf } from './common.js';
+import { tail, summarize, verdictOf, tilde, every, installed } from './common.js';
 
 const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const ROOT = path.join(HOME, 'projects');
@@ -18,6 +18,8 @@ export function slim(o) {
     const text = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
     return {
       t: 'a', ts: o.timestamp, id: m.id, model: m.model, effort: o.effort, advisor: o.advisorModel, cwd: o.cwd,
+      // null or tool_use: the message is still streaming or continues with a tool call
+      partial: !m.stop_reason || m.stop_reason === 'tool_use',
       u: { in: u.input_tokens ?? 0, out: u.output_tokens ?? 0, cr: u.cache_read_input_tokens ?? 0,
            cw: (u.cache_creation_input_tokens ?? 0) - cw1h, cw1h },
       // advisor calls report their own model and tokens here; top-level usage leaves them out
@@ -38,6 +40,14 @@ export function slim(o) {
   return null;
 }
 
+// Folder names turn '/' into '-', which is lossy, so read the real cwd from the transcript head.
+function cwdOf(file) {
+  const buf = Buffer.alloc(64 * 1024), fd = fs.openSync(file, 'r');
+  const head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0));
+  fs.closeSync(fd);
+  return tilde(head.match(/"cwd":"([^"]+)"/)?.[1]);
+}
+
 function listSessions(limit = 40) {
   const out = [];
   let projects = [];
@@ -48,7 +58,6 @@ function listSessions(limit = 40) {
     for (const f of files.filter(f => f.endsWith('.jsonl'))) {
       const p = path.join(ROOT, project, f), st = fs.statSync(p);
       if (!st.size) continue;
-      // folder names turn '/' into '-', which is lossy, so prefer the cwd recorded in the transcript
       out.push({ key: p, id: f.slice(0, -6), cwd: cwdOf(p) ?? project, mtime: st.mtimeMs, size: st.size });
     }
   }
@@ -58,7 +67,7 @@ function listSessions(limit = 40) {
 // --session accepts a transcript path or a session id.
 const resolve = arg => arg.endsWith('.jsonl') ? path.resolve(arg) : listSessions(Infinity).find(s => s.id === arg)?.key;
 
-const valid = key => !!key && inside(ROOT, key) && key.endsWith('.jsonl') && fs.existsSync(key);
+const valid = key => !!key && path.resolve(key).startsWith(ROOT + path.sep) && key.endsWith('.jsonl') && fs.existsSync(key);
 
 // Pushes batches of { a: agentId, r: record } and { a, meta }; calls end() if a file is rewritten.
 function watch(key, push, end) {
