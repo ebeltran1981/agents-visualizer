@@ -48,8 +48,9 @@ function watch(key, push, end) {
     // new parts, plus tool parts that weren't finished last time
     const parts = q(`SELECT id, message_id, data, time_created FROM part WHERE session_id = ? AND (id > ? OR id IN (SELECT value FROM json_each(?)))
                      ORDER BY id`).all(sid, s.maxPart, JSON.stringify([...s.pending]));
+    // summed: a message's usage adds up all its steps, so it isn't one request
     const a = (m, ts, extra) => ({ t: 'a', ts: iso(ts), id: m.id, model: m.modelID, effort: m.variant, cwd: tilde(m.path?.cwd),
-      u: s.usage[m.id] ?? { in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 }, cost: m.id in s.cost ? { total: s.cost[m.id] } : undefined, adv: [], tools: [], ...extra });
+      u: s.usage[m.id] ?? { in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 }, cost: m.id in s.cost ? { total: s.cost[m.id] } : undefined, adv: [], tools: [], summed: true, ...extra });
 
     for (const p of parts) {
       const d = json(p.data), m = { ...msgs.get(p.message_id), id: p.message_id };

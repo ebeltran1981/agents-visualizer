@@ -19,6 +19,8 @@ export const EFFORT = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
 const IDLE_MS = 45_000;
 // An advisor writes nothing while it thinks, so wait longer than IDLE_MS before calling a review stalled.
 const REVIEW_MS = 300_000;
+// Anthropic's two cache lifetimes; every request that reads the cache restarts its clock.
+const TTL_5M = 300_000, TTL_1H = 3_600_000;
 
 // Company rates and names from prices.local.json; they take precedence over PRICES.
 let LOCAL = {};
@@ -52,6 +54,7 @@ const agentInputCost = a => usesPaid(a) && a.paid.inN === a.paid.n ? a.paid.in :
 export const priced = a => a.paid.n > 0 || !!priceFor(a.model);
 
 export const readTokens = u => u.in + u.cr + u.cw + u.cw1h;
+export const hitRate = u => readTokens(u) ? u.cr / readTokens(u) : null;
 export const CLAUDE_FAMILIES = ['fable', 'mythos', 'opus', 'sonnet', 'haiku'];
 // Claude models group by family (opus, sonnet…); any other model stands for itself.
 export const family = m => local(m)?.family ?? baseModel(m).match(/^claude-([a-z]+)/)?.[1] ?? (baseModel(m) || '?');
@@ -77,6 +80,7 @@ function agentOf(s, id) {
     id, n: [...s.agents.values()].filter(b => b.type !== 'advisor').length,  // advisors take no card number
     type: id === 'main' ? 'main' : 'agent', desc: '', model: '', effort: '', advisor: '',
     u: zero(), paid: { total: 0, in: 0, n: 0, inN: 0 }, usage: new Map(), files: new Set(), tools: 0, writes: 0, errors: 0, lastKind: '', activity: null, final: '', lastTs: 0,
+    breaks: [], ttl: 0, lastReq: null, cacheTs: 0,
   });
   return s.agents.get(id);
 }
@@ -100,6 +104,24 @@ export function ingest(s, id, r) {
     a.errors++; row('error', msg, seen ? 'again' : '', true);
     if (seen) { check('repeat'); s.repeatPending = true; }
     s.errs.add(errKey(msg));
+  };
+  // A request that reads back less than half of what the previous one left cached paid to write it again: a cache break.
+  // Only single requests are compared; usage summed over several model runs (summed) just keeps the cache warm.
+  const cacheTurn = single => {
+    const last = a.lastReq, fresh = r.u.in + r.u.cw + r.u.cw1h;
+    if (single && last && r.u.cr < readTokens(last.u) / 2 && fresh > 1000) {
+      const gap = Date.parse(r.ts) - Date.parse(last.ts);
+      const cause = last.model !== r.model ? 'model changed'
+        : gap > (a.ttl || TTL_5M) ? `idle ${Math.round(gap / 60_000)} min${a.ttl ? ` > ${a.ttl === TTL_1H ? '1h' : '5 min'} cache` : ''}`
+        : 'context changed';
+      const c = inputCost(r.model, { ...r.u, cr: 0 });
+      a.breaks.push({ id: r.id, ts: r.ts, cause, tokens: fresh, cost: c });
+      row('cache', `rewrote ${Math.round(fresh / 1000)}k · ${cause}${c == null ? '' : ` · $${c.toFixed(2)}`}`);
+    }
+    if (single) a.lastReq = r;
+    if (r.u.cw1h) a.ttl = TTL_1H;
+    else if (r.u.cw && !a.ttl) a.ttl = TTL_5M;
+    a.cacheTs = Math.max(a.cacheTs, Date.parse(r.ts));
   };
   a.lastTs = Date.parse(r.ts) || a.lastTs;
   if (r.cwd && id === 'main') s.cwd = r.cwd;
@@ -149,6 +171,7 @@ export function ingest(s, id, r) {
     Object.assign(a, { model: r.model, effort: r.effort ?? a.effort, advisor: r.advisor ?? a.advisor });
     // One API message is split over several lines that repeat its usage: count it once.
     const prev = a.usage.get(r.id);
+    if (readTokens(r.u)) cacheTurn(!prev && !r.summed);
     if (prev) { addU(a.u, prev.u, -1); prev.adv.forEach(x => addU(s.adv.u, x.u, -1)); s.adv.calls -= prev.adv.length; }
     if (prev?.cost) addU(a.paid, paidOf(prev.cost), -1);
     if (r.cost) addU(a.paid, paidOf(r.cost));
@@ -181,6 +204,38 @@ export function ingest(s, id, r) {
     row(id === 'main' ? 'prompt' : 'task', r.text);
   }
   return rows;
+}
+
+// Cache use by main and subagents: hit rate, money saved, breaks, subagent warm-up, and how long main's cache stays warm.
+export function cacheSummary(s) {
+  const all = [...s.agents.values()].filter(a => a.type !== 'advisor'), main = s.agents.get('main');
+  const subs = all.filter(a => a.id !== 'main' && a.usage.size);
+  const sum = (list, f) => list.reduce((t, x) => t + (f(x) ?? 0), 0);
+  const u = zero();
+  all.forEach(a => addU(u, a.u));
+  // the read discount minus the write premium (5-minute writes cost cacheWrite, 1-hour writes twice the input price)
+  const saved = a => {
+    const p = priceFor(a.model);
+    return p ? (a.u.cr * (p.in - p.cacheRead) - a.u.cw * (p.cacheWrite - p.in) - a.u.cw1h * p.in) / 1e6 : null;
+  };
+  const warmup = a => { const first = [...a.usage.values()][0]; return inputCost(first.model, { ...first.u, cr: 0 }); };
+  const breaks = all.flatMap(a => a.breaks.map(b => ({ ...b, agent: label(a) }))).sort((x, y) => x.ts.localeCompare(y.ts));
+
+  const last = main?.lastReq, ttl = main?.ttl || null;
+  const prefix = last ? readTokens(last.u) : 0;
+  const brk = new Set(main?.breaks.map(b => b.id));
+  const anyPriced = list => list.some(a => priceFor(a.model));
+  return {
+    u, hit: hitRate(u), saved: anyPriced(all) ? sum(all, saved) : null, unpriced: all.filter(a => readTokens(a.u) && !priceFor(a.model)).length,
+    tracked: all.some(a => a.lastReq),  // breaks need single requests, which opencode doesn't record
+    breaks, breakCost: sum(breaks, b => b.cost), warmup: anyPriced(subs) ? sum(subs, warmup) : null, warmupN: subs.length,
+    main: {
+      ttl, prefix,
+      expiresAt: ttl ? main.cacheTs + ttl : null,
+      rewriteCost: last && ttl ? inputCost(last.model, { ...zero(), [ttl === TTL_1H ? 'cw1h' : 'cw']: prefix }) : null,
+      series: main ? [...main.usage.values()].filter(r => !r.summed && readTokens(r.u)).map(r => ({ cr: r.u.cr, brk: brk.has(r.id) })) : [],
+    },
+  };
 }
 
 // idle | working | done | PASS | FAIL

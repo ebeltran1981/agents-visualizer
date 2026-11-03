@@ -25,6 +25,8 @@ export function slim(o) {
       // advisor calls report their own model and tokens here; top-level usage leaves them out
       adv: (u.iterations ?? []).filter(i => i.type === 'advisor_message').map(i => ({ model: i.model,
         u: { in: i.input_tokens ?? 0, out: i.output_tokens ?? 0, cr: i.cache_read_input_tokens ?? 0, cw: i.cache_creation_input_tokens ?? 0, cw1h: 0 } })),
+      // a message that calls the advisor runs the model again after it, and top-level usage adds both runs up
+      summed: (u.iterations ?? []).filter(i => i.type === 'message').length > 1,
       tools: content.filter(c => c.type === 'tool_use')
         .map(c => ({ id: c.id, name: c.name, input: summarize(c.input), full: fullInput(c.input), file: c.input?.file_path ?? c.input?.notebook_path })),
       text: clip(text) || undefined,

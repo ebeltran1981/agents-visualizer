@@ -62,6 +62,7 @@ What the dashboard shows:
 | Advisor | The advisor model, its three checkpoint pills, the number of real advisor calls, and the tokens and cost of those calls. |
 | Subagents | One card per subagent: model, type, effort, activity and state (working, idle, done, PASS or FAIL). |
 | The read bill | What the subagents' reading cost on their own models, compared with the same tokens on the main model. |
+| The cache | Hit rate, money the cache saved, cache breaks and what rebuilding cost, subagent warm-up, a sparkline of the main agent's cached prefix, and a countdown to when its cache expires (or, once it has, what the next turn will cost to rewrite). Each agent card shows its own hit rate. |
 | Session log | Every tool call, message, error and advisor call, with timestamps and day dividers. Hover a row whose text is cut off and click **full** to read the whole message. |
 | Footer | The reconstructed command line, the effort levels, the subagent count and the advisor's state. |
 
@@ -144,6 +145,7 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 | `prices.local.example.json` | Template for your own rates and model names; copy it to `prices.local.json`. |
 | `index.html` | The dashboard, written in vanilla JS and CSS. |
 | `statusline.js` | The one-line status line. |
+| `test/` | Tests for the cache metrics: `npm test` (Node's built-in runner, no dependencies). |
 
 ## Notes
 
@@ -156,6 +158,7 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 - **oh-my-pi** records the cost of each message itself. The dashboard uses that unless `prices.local.json` has the model. Subagents are named after their file (for example "BackendArch") and get their agent type (for example "scout") once the parent's `task` call returns. They count as done when they call `yield`, and show PASS or FAIL when its data has that status or result. With `--advisor`, the advisor's own transcript (`__advisor.jsonl`) feeds the advisor panel: each finished review is one call. A review ends with an `advise` call (its note becomes the log row) or with a text reply such as "I'm not sending any advice". A failed model call (say, a retired model) shows as an error and marks the agent FAIL. Not yet counted: the small cost of omp's automatic thinking-level judge.
 - **pi** uses the same parser as oh-my-pi. Sessions saved with `--session-dir` or a custom `sessionDir` setting aren't listed. Checked on a real pi 1.1.0 session: its tokens and tool calls match pi's own file exactly. pi records the cost it knows; models added in `~/.pi/agent/models.json` without a `cost` show as $0.00.
 - **opencode** sessions are read from its SQLite database without writing to it. While opencode is running, the dashboard opens the database read-only and sees new rows as they land. Otherwise it opens the file as immutable, so no `-wal` or `-shm` files are created next to it. Costs come from opencode's own per-step pricing unless `prices.local.json` has the model; opencode doesn't split cost into input and output, so its subagents appear in the read bill only when the price table knows their model. Checked on a real 10-subagent run: its token totals match opencode's own session totals exactly.
+- **Cache metrics.** The hit rate is cache reads over all input tokens. "Saved" is the cache-read discount minus the write premium (1-hour writes cost twice the input price), at list price, so it needs prices. A **break** is a request that reads back less than half of what the previous request left cached and sends over 1k uncached tokens (cache writes plus fresh input, since providers with automatic caching report a miss as fresh input). Its cause is a model change, an idle gap longer than the cache's lifetime, or otherwise "context changed" (a compaction, say). The lifetime is 1 hour once an agent writes to the 1-hour cache, 5 minutes if it writes only 5-minute entries, and each request restarts it. Breaks are checked only on single model requests. Claude Code messages that call the advisor add up two model runs, and opencode adds up a message's steps, so those messages keep the cache warm but are not compared. The countdown depends on the model, not the harness: Claude models report cache writes in every harness, while providers that cache automatically (the DeepSeek, Kimi and MiniMax runs, say) report none, so they get hit rate and breaks but no countdown.
 - If the server restarts or a session file is rewritten, the page reconnects and rebuilds from scratch, so nothing is counted twice.
 
 ## License

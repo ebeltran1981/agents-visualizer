@@ -83,12 +83,21 @@
   .billfoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; color: var(--dim); font-size: 12px; }
   .x { display: inline-block; color: var(--bg); background: var(--lime); padding: 2px 8px; font-weight: 700; margin-left: 8px; white-space: nowrap; }
   .x:empty { display: none; }
+  /* cache */
+  .cstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .cstats .big { display: block; text-align: left; }
+  .cstats small, #cSparkBox small { display: block; color: var(--dim); font-size: 11px; margin-top: 4px; }
+  .big.amber { color: var(--amber); }
+  #cSpark { display: block; width: 100%; height: 44px; margin: 4px 0 6px; }
+  #cSpark polyline { fill: none; stroke: var(--c, var(--lime)); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  #cSpark line { stroke: var(--red); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+  .warm { color: var(--lime); } .cold { color: var(--amber); }
   /* log */
   #log { background: var(--panel); border: 1px solid var(--line); height: 300px; overflow-y: auto; padding: 6px 0; scroll-behavior: smooth; }
   .ln { display: grid; grid-template-columns: 70px 150px 110px 1fr 180px; gap: 10px; padding: 1px 12px; animation: in .5s; }
   .ln span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ln span:last-child { text-align: right; }
-  .ln.err { color: var(--red); }
+  .ln.err { color: var(--red); } .ln.warn { color: var(--amber); }
   .ln span:nth-child(4) { position: relative; }
   button { font: inherit; font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line); padding: 0 8px; cursor: pointer; }
   button:hover { color: var(--lime); border-color: var(--lime); }
@@ -114,7 +123,7 @@
     body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { justify-content: start; width: 100%; }
     #picker { flex: 1 1 100%; min-width: 0; } h1 { font-size: 32px; }
     .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
-    .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; }
+    .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; } .cstats { grid-template-columns: 1fr 1fr; }
     .ln { grid-template-columns: 60px 1fr; } .ln span:nth-child(n+3) { grid-column: 1 / -1; text-align: left; } select { max-width: 100%; }
   }
 </style>
@@ -157,6 +166,18 @@
   <div class="billfoot"><span>same tokens × list price · session total <span id="partial"></span><b id="total"></b> vs <b id="totalIfMain"></b> if all on the main model <span id="unpriced"></span></span><span class="x" id="ratio"></span></div>
 </div>
 
+<h2>The cache <span id="cacheTokens"></span></h2>
+<div class="bill">
+  <div class="cstats">
+    <div><span class="big" id="cHit"></span><small>hit rate · input read from cache</small></div>
+    <div><span class="big lime" id="cSaved"></span><small id="cSavedNote"></small></div>
+    <div><span class="big" id="cBreaks"></span><small id="cBreakNote"></small></div>
+    <div><span class="big" id="cWarm"></span><small id="cWarmNote"></small></div>
+  </div>
+  <div id="cSparkBox"><small>main's cached prefix per request · <span class="err">┊</span> a break</small><svg id="cSpark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg></div>
+  <div class="billfoot"><span id="cStatus"></span><span id="cTtl"></span></div>
+</div>
+
 <h2>Session log <span id="logCwd"></span></h2>
 <div id="log"><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
 <dialog id="full"><div class="top"><span id="fullHead"></span><form method="dialog"><button>close</button></form></div><pre id="fullText"></pre></dialog>
@@ -164,12 +185,16 @@
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, cacheSummary, hitRate, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
 
 const $ = id => document.getElementById(id);
 const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
 const fmtK = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
 const fmtN = n => String(Math.round(n));
+const pct = n => n == null ? '—' : Math.round(100 * n) + '%';
+const money = n => n == null ? '—' : n < 0 ? '−' + fmt$(-n) : fmt$(n);
+const countdown = ms => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+const ago = ms => ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : ms < 86_400_000 ? `${(ms / 3_600_000).toFixed(1)} h` : `${Math.round(ms / 86_400_000)} days`;
 const time = ts => new Date(ts).toLocaleTimeString([], { hour12: false });
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const cssVar = (name, el = document.documentElement) => getComputedStyle(el).getPropertyValue(name).trim();
@@ -232,7 +257,7 @@ function makeCard(id) {
     <div class="effort">effort <i class="seg">${'<b></b>'.repeat(5)}</i> <span data-k="effort"></span> <span class="ro" data-k="ro"></span></div>
     <div class="act"><span class="badge" data-k="state"></span> <span data-k="act"></span></div>
     <div class="stats"><span><b data-k="files"></b> files</span><span><b data-k="tools"></b> tools</span>
-      <span><b data-k="out"></b> out / <b data-k="in"></b> in</span><span><b data-k="cost"></b></span><span class="err" data-k="err"></span></div>`;
+      <span><b data-k="out"></b> out / <b data-k="in"></b> in</span><span>hit <b data-k="hit"></b></span><span><b data-k="cost"></b></span><span class="err" data-k="err"></span></div>`;
   el.k = Object.fromEntries([...el.querySelectorAll('[data-k]')].map(x => [x.dataset.k, x]));
   el.segs = [...el.querySelectorAll('.seg b')];
   return el;
@@ -257,6 +282,7 @@ function updateCard(parent, a, now) {
   tween(k.tools, a.tools, fmtN);
   tween(k.out, a.u.out, fmtK);
   tween(k.in, readTokens(a.u), fmtK);
+  setText(k.hit, pct(hitRate(a.u)));
   tween(k.cost, agentCost(a), fmt$);
   const act = ['done', 'PASS', 'FAIL'].includes(st) ? `<span class="dim">${esc(a.final.split('\n').find(Boolean))}</span>`
     : a.activity ? `<i>${sym}</i> ${esc(v)} <span class="dim">${esc(a.activity.input)}</span>` : '<span class="dim">waiting…</span>';
@@ -329,6 +355,7 @@ function render() {
   setText($('partial'), s.partial ? '≥ ' : '');
   setText($('unpriced'), s.partial ? `· no price for ${s.unpriced.join(', ')}: add them to prices.local.json` : '');
   setText($('logCwd'), basename(state.cwd));
+  renderCache(now);
 
   const subFams = [...new Set(s.readSubs.map(a => family(a.model)))].join(' + ');  // the agents readTokens counts
   $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ ${esc(harness.bin)} --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
@@ -340,6 +367,35 @@ function render() {
 
   $('cursor').hidden = !(replaying || Date.now() - lastRecord < 60_000);
   setText($('progress'), replaying ? `▶ ${speed}x · ${played}/${played + queue.length} events` : '');
+}
+
+// The cache panel: totals, main's cached prefix per request, and how long main's cache stays warm.
+function renderCache(now) {
+  const c = cacheSummary(state), m = c.main, written = c.u.cw + c.u.cw1h;
+  setHTML($('cacheTokens'), c.u.cr || written ? `read from cache <b>${fmtK(c.u.cr)}</b> · written <b>${fmtK(written)}</b>${c.u.cw1h ? ` (1h ${fmtK(c.u.cw1h)})` : ''}` : '');
+  setText($('cHit'), pct(c.hit));
+  setText($('cSaved'), money(c.saved));
+  setText($('cSavedNote'), c.saved == null ? 'saved · no prices: add them to prices.local.json'
+    : `saved vs no cache, at list price${c.unpriced ? ` · ${c.unpriced} agents left out (no price)` : ''}`);
+  setText($('cBreaks'), c.tracked ? String(c.breaks.length) : '—');
+  $('cBreaks').classList.toggle('amber', c.breaks.length > 0);
+  setText($('cBreakNote'), !c.tracked ? `breaks · ${harness.label} records usage per message, not per request`
+    : c.breaks.length ? `breaks · rewrites cost ${money(c.breakCost)}` : 'breaks · the cache was never rebuilt');
+  setText($('cWarm'), c.warmupN ? money(c.warmup) : '—');
+  setText($('cWarmNote'), c.warmupN ? `warm-up · ${c.warmupN} subagents' first requests` : 'warm-up · no subagents');
+
+  const pts = m.series, max = Math.max(1, ...pts.map(p => p.cr)), x = i => (100 * i / Math.max(1, pts.length - 1)).toFixed(2);
+  $('cSparkBox').hidden = pts.length < 2;
+  $('cSpark').setAttribute('class', tint(family(state.agents.get('main')?.model)));
+  const line = pts.map((p, i) => `${x(i)},${(29 - 28 * p.cr / max).toFixed(2)}`).join(' ');
+  setHTML($('cSpark'), `<polyline points="${line}"/>` + pts.map((p, i) => p.brk ? `<line x1="${x(i)}" x2="${x(i)}" y1="0" y2="30"/>` : '').join(''));
+
+  const left = m.expiresAt - now;
+  const rewrite = m.prefix ? ` · main's next turn rewrites ~<b>${fmtK(m.prefix)}</b> tokens (~${fmt$(m.rewriteCost)})` : '';
+  setHTML($('cStatus'), !m.expiresAt ? (c.u.cr ? `<span class="dim">main's model reports no cache writes (it caches automatically), so there is no lifetime to count down</span>` : '')
+    : left > 0 ? `<span class="warm">● warm</span> · main's cache expires in <b>${countdown(left)}</b>`
+    : `<span class="cold">○ expired ${ago(-left)} ago</span>${rewrite}`);
+  setText($('cTtl'), m.ttl ? `${m.ttl === 3_600_000 ? '1-hour' : '5-minute'} cache · each request restarts it` : '');
 }
 
 // Log: stick to the bottom unless the user scrolls up.
@@ -359,7 +415,7 @@ function appendLog(rows) {
       log.insertBefore(d, $('cursor'));
     }
     const el = document.createElement('div');
-    el.className = `ln ${tint(r.fam)}` + (r.err ? ' err' : '');
+    el.className = `ln ${tint(r.fam)}` + (r.err ? ' err' : r.action === 'cache' ? ' warn' : '');
     el.title = r.ts;
     el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span><span class="dim">${esc(r.note)}</span>`;
     el.row = r;
