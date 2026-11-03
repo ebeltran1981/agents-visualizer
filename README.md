@@ -63,7 +63,7 @@ What the dashboard shows:
 | Subagents | One card per subagent: model, type, effort, activity and state (working, idle, done, PASS or FAIL). |
 | The read bill | What the subagents' reading cost on their own models, compared with the same tokens on the main model. |
 | The cache | Hit rate, money the cache saved, cache breaks and what rebuilding cost, subagent warm-up, a sparkline of the main agent's cached prefix, and a countdown to when its cache expires (or, once it has, what the next turn will cost to rewrite). Each agent card shows its own hit rate. |
-| Session log | Every tool call, message, error and advisor call, with timestamps and day dividers. Hover a row whose text is cut off and click **full** to read the whole message. |
+| Session log | Every tool call, message, error and advisor call, with timestamps and day dividers. Hover a row whose text is cut off and click **full** to read the whole message. Messages render as Markdown (**raw** shows the original text); tool inputs and errors stay exactly as typed. |
 | Footer | The reconstructed command line, the effort levels, the subagent count and the advisor's state. |
 
 ## Getting a multi-model session
@@ -142,6 +142,7 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 | `server.js` | Streams the selected harness's session over SSE (`/events`). Also serves `/api/harnesses` and `/api/sessions`. |
 | `harnesses/*.js` | One adapter per harness: lists its sessions and turns its files into the shared record format. |
 | `aggregate.js` | Harness-agnostic aggregation and the price table. The browser and `statusline.js` both use it. |
+| `markdown.js` | A small Markdown renderer for messages in the full-message view, with no dependencies. It escapes all HTML first, so a transcript can't inject markup. |
 | `prices.local.example.json` | Template for your own rates and model names; copy it to `prices.local.json`. |
 | `index.html` | The dashboard, written in vanilla JS and CSS. |
 | `statusline.js` | The one-line status line. |

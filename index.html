@@ -108,7 +108,24 @@
   :root:has(dialog[open]) { overflow: hidden; }  /* the page stays put while the dialog is open */
   :root { scrollbar-gutter: stable; }
   dialog .top { padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
-  dialog pre { margin: 0; padding: 12px 14px; max-height: calc(80vh - 50px); overflow: auto; font: inherit; font-variant-ligatures: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+  dialog form { display: flex; gap: 6px; }
+  #fullText, #fullMd { margin: 0; padding: 12px 14px; max-height: calc(80vh - 50px); overflow: auto; overflow-wrap: anywhere; }
+  #fullText, .md pre { font: inherit; font-variant-ligatures: none; white-space: pre-wrap; }
+  /* rendered Markdown */
+  .md { line-height: 1.55; }
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md p, .md ul, .md ol, .md pre, .md table { margin: 0 0 10px; }
+  .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 16px 0 6px; font-size: 13px; color: var(--c, var(--lime)); }
+  .md h1 { font-size: 17px; } .md h2 { font-size: 15px; }
+  .md ul, .md ol { padding-left: 22px; } .md li > ul, .md li > ol { margin: 2px 0; }
+  .md b { color: #e8ecdf; }
+  .md code { font-variant-ligatures: none; background: #1d221d; padding: 0 4px; }
+  .md pre { background: #0e110f; border: 1px solid var(--line); padding: 8px 10px; }
+  .md pre code { background: none; padding: 0; }
+  .md table { display: block; overflow-x: auto; border-collapse: collapse; }
+  .md th, .md td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; vertical-align: top; }
+  .md th { color: var(--dim); font-weight: 500; }
+  .md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
   .day { color: var(--dim); padding: 4px 12px; font-size: 11px; letter-spacing: 1px; }
   #cursor { animation: none; } #cursor b { color: var(--lime); animation: blink 1s steps(1) infinite; }
   #cursor[hidden] { display: none; }
@@ -180,12 +197,13 @@
 
 <h2>Session log <span id="logCwd"></span></h2>
 <div id="log"><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
-<dialog id="full"><div class="top"><span id="fullHead"></span><form method="dialog"><button>close</button></form></div><pre id="fullText"></pre></dialog>
+<dialog id="full"><div class="top"><span id="fullHead"></span><form method="dialog"><button type="button" id="fullRaw">raw</button><button>close</button></form></div><pre id="fullText"></pre><div class="md" id="fullMd"></div></dialog>
 
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
 import { createState, ingest, ingestMeta, summary, cacheSummary, hitRate, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
+import { markdown } from './markdown.js';
 
 const $ = id => document.getElementById(id);
 const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
@@ -434,12 +452,20 @@ log.addEventListener('mouseover', e => {
   if (ln.row.full !== ln.row.detail || cell.scrollWidth > cell.clientWidth) cell.append(more); else more.remove();
 });
 log.addEventListener('mouseleave', () => more.remove());
+// Messages render as Markdown, with a toggle back to the raw text; tool inputs and errors stay exactly as typed.
+const MARKDOWN = new Set(['says', 'prompt', 'task', 'advisor']);
+const showRaw = raw => { $('fullText').hidden = !raw; $('fullMd').hidden = raw; $('fullRaw').textContent = raw ? 'rendered' : 'raw'; };
+$('fullRaw').onclick = () => showRaw(!$('fullMd').hidden);
 more.onclick = () => {
-  const r = more.closest('.ln').row;
+  const r = more.closest('.ln').row, md = MARKDOWN.has(r.action);
   $('full').className = tint(r.fam) + (r.err ? ' err' : '');
   $('fullHead').innerHTML = `<span class="dim">${time(r.ts)}</span> <span class="model">${esc(r.agent)}</span> ${esc(r.action)} <span class="dim">${esc(r.note)}</span>`;
   $('fullText').textContent = r.full;
+  $('fullMd').innerHTML = md ? markdown(r.full) : '';
+  $('fullRaw').hidden = !md;
+  showRaw(!md);
   $('full').showModal();
+  $('fullText').scrollTop = $('fullMd').scrollTop = 0;
 };
 $('full').onclick = e => { if (e.target === $('full')) $('full').close(); };  // a click on the backdrop
 

@@ -14,7 +14,7 @@ const HARNESSES = Object.fromEntries(ALL.map(h => [h.id, h]));
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.PORT || 4321);
 const LOCAL_PRICES = path.join(HERE, 'prices.local.json');
-const STATIC = { '/': ['index.html', 'text/html'], '/aggregate.js': ['aggregate.js', 'text/javascript'] };
+const STATIC = { '/': ['index.html', 'text/html'], '/aggregate.js': ['aggregate.js', 'text/javascript'], '/markdown.js': ['markdown.js', 'text/javascript'] };
 
 const arg = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : ''; };
 // Only harnesses installed on this computer appear in the dropdown, plus one asked for with --harness.
