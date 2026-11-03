@@ -29,7 +29,8 @@ function listSessions(limit = 40) {
     .map(s => ({ key: s.id, id: s.id.replace(/^ses_/, ''), cwd: tilde(s.directory), mtime: s.time_updated, size: 0 }));
 }
 
-const resolve = arg => listSessions(Infinity).find(s => s.key === arg || s.id === arg)?.key;
+// LIMIT -1 is no limit in SQLite; Infinity is a datatype mismatch.
+const resolve = arg => listSessions(-1).find(s => s.key === arg || s.id === arg)?.key;
 const valid = key => /^[\w-]+$/.test(key ?? '') && rows('SELECT 1 FROM session WHERE id = ?', key).length > 0;
 
 const iso = ms => new Date(ms).toISOString();
