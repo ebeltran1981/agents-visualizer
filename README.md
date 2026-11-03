@@ -6,7 +6,7 @@ Live dashboard of one coding-agent session: the main agent, its advisor and its 
 
 *A real run: Opus 5.5 plans and reviews, Fable 5.1 advises at two checkpoints, and 10 subagents (Haiku 4.5 reads, Sonnet 5.5 edits) build a small library in 4m46s for $3.11.*
 
-It only reads the session files each harness already writes, and never writes into them.
+It only reads the session files each harness already writes, and never writes into them. It collects and stores no data of its own: see [Privacy](#privacy).
 
 | Harness | Sessions read from |
 |---|---|
@@ -14,6 +14,17 @@ It only reads the session files each harness already writes, and never writes in
 | oh-my-pi | `~/.omp/agent/sessions/<cwd>/<timestamp>_<id>.jsonl`, with subagents in the same-named folder as `<Name>.jsonl` |
 | pi | `~/.pi/agent/sessions/--<cwd>--/<timestamp>_<id>.jsonl` (or `$PI_CODING_AGENT_DIR/sessions`); pi has no built-in subagents |
 | opencode | the SQLite database `~/.local/share/opencode/opencode.db` (or `$OPENCODE_DB`); subagents are child sessions |
+
+## Privacy
+
+agents-visualizer collects nothing and stores nothing. Everything the dashboard shows is read from the session files your harnesses already keep on this computer, at the moment it is shown.
+
+- **Read-only.** It opens session files, and opencode's database, for reading only. It never writes to them or to any other file.
+- **Nothing stored.** It has no database, cache or log file of its own, and the page uses no cookies or browser storage. What you see lives in the page's memory and is gone when you close the tab. The one trace is your browser history, which keeps the page URL with the harness and session path.
+- **Nothing sent.** The server listens only on `127.0.0.1`, so other computers can't reach it. Neither the server nor the page contacts any outside service: no telemetry, analytics, CDN or web fonts.
+- **No dependencies.** It runs on Node's standard library alone, so there is no third-party code that could do otherwise.
+
+This covers agents-visualizer only. The harnesses themselves send your prompts to their model providers, under those providers' terms.
 
 ## Setup
 
@@ -146,3 +157,7 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 - **pi** uses the same parser as oh-my-pi. Sessions saved with `--session-dir` or a custom `sessionDir` setting aren't listed. Checked on a real pi 1.1.0 session: its tokens and tool calls match pi's own file exactly. pi records the cost it knows; models added in `~/.pi/agent/models.json` without a `cost` show as $0.00.
 - **opencode** sessions are read from its SQLite database without writing to it. While opencode is running, the dashboard opens the database read-only and sees new rows as they land. Otherwise it opens the file as immutable, so no `-wal` or `-shm` files are created next to it. Costs come from opencode's own per-step pricing unless `prices.local.json` has the model; opencode doesn't split cost into input and output, so its subagents appear in the read bill only when the price table knows their model. Checked on a real 10-subagent run: its token totals match opencode's own session totals exactly.
 - If the server restarts or a session file is rewritten, the page reconnects and rebuilds from scratch, so nothing is counted twice.
+
+## License
+
+[MIT](LICENSE) © 2026 Edwin Beltran. Use, change and share it freely, commercially or not, as long as copies keep the copyright notice and license.
