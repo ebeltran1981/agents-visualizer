@@ -89,6 +89,17 @@
   .ln span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ln span:last-child { text-align: right; }
   .ln.err { color: var(--red); }
+  .ln span:nth-child(4) { position: relative; }
+  button { font: inherit; font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line); padding: 0 8px; cursor: pointer; }
+  button:hover { color: var(--lime); border-color: var(--lime); }
+  .more { position: absolute; top: 0; right: 0; bottom: 0; color: var(--lime); box-shadow: -14px 0 10px var(--panel); }
+  dialog { width: min(900px, calc(100vw - 32px)); max-height: 80vh; padding: 0; background: var(--panel); color: var(--text); color-scheme: dark;
+           border: 1px solid var(--line); border-left: 3px solid var(--c, var(--lime)); }
+  dialog::backdrop { background: rgba(0, 0, 0, .6); }
+  :root:has(dialog[open]) { overflow: hidden; }  /* the page stays put while the dialog is open */
+  :root { scrollbar-gutter: stable; }
+  dialog .top { padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+  dialog pre { margin: 0; padding: 12px 14px; max-height: calc(80vh - 50px); overflow: auto; font: inherit; font-variant-ligatures: none; white-space: pre-wrap; overflow-wrap: anywhere; }
   .day { color: var(--dim); padding: 4px 12px; font-size: 11px; letter-spacing: 1px; }
   #cursor { animation: none; } #cursor b { color: var(--lime); animation: blink 1s steps(1) infinite; }
   #cursor[hidden] { display: none; }
@@ -148,6 +159,7 @@
 
 <h2>Session log <span id="logCwd"></span></h2>
 <div id="log"><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
+<dialog id="full"><div class="top"><span id="fullHead"></span><form method="dialog"><button>close</button></form></div><pre id="fullText"></pre></dialog>
 
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
@@ -350,11 +362,30 @@ function appendLog(rows) {
     el.className = `ln ${tint(r.fam)}` + (r.err ? ' err' : '');
     el.title = r.ts;
     el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span><span class="dim">${esc(r.note)}</span>`;
+    el.row = r;
     log.insertBefore(el, $('cursor'));
   }
   while (log.children.length > 600) log.firstChild.remove();
   if (rows.length && stick) log.scrollTop = log.scrollHeight;
 }
+
+// Hovering a row whose text is cut off floats a button over its end; the button opens the whole message.
+const more = Object.assign(document.createElement('button'), { className: 'more', textContent: 'full', title: 'show the full message' });
+log.addEventListener('mouseover', e => {
+  const ln = e.target.closest('.ln'), cell = ln?.children[3];
+  if (!ln?.row) return more.remove();
+  if (cell.contains(more)) return;
+  if (ln.row.full !== ln.row.detail || cell.scrollWidth > cell.clientWidth) cell.append(more); else more.remove();
+});
+log.addEventListener('mouseleave', () => more.remove());
+more.onclick = () => {
+  const r = more.closest('.ln').row;
+  $('full').className = tint(r.fam) + (r.err ? ' err' : '');
+  $('fullHead').innerHTML = `<span class="dim">${time(r.ts)}</span> <span class="model">${esc(r.agent)}</span> ${esc(r.action)} <span class="dim">${esc(r.note)}</span>`;
+  $('fullText').textContent = r.full;
+  $('full').showModal();
+};
+$('full').onclick = e => { if (e.target === $('full')) $('full').close(); };  // a click on the backdrop
 
 // Every event goes through the queue; replay drains it on a virtual clock, live drains it at once.
 function apply(events) {

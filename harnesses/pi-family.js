@@ -2,7 +2,7 @@
 // <root>/<encoded cwd>/<ISO timestamp>_<id>.jsonl, appended one record per line.
 import fs from 'node:fs';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde, every, installed, inside, cwdOf } from './common.js';
+import { tail, summarize, fullInput, clip, verdictOf, tilde, every, installed, inside, cwdOf } from './common.js';
 
 // oh-my-pi subagents hand back structured data with yield; PASS/FAIL usually sits in its status or result field.
 const yieldVerdict = x => typeof x?.data === 'string' ? verdictOf(x.data)
@@ -26,21 +26,23 @@ export function slim(o, ctx) {
       u: { in: u.input ?? 0, out: u.output ?? 0, cr: u.cacheRead ?? 0, cw: (u.cacheWrite ?? 0) - (u.cacheWrite1h ?? 0), cw1h: u.cacheWrite1h ?? 0 },
       cost: c.total == null ? undefined : { total: c.total, in: (c.input ?? 0) + (c.cacheRead ?? 0) + (c.cacheWrite ?? 0) },
       adv: [],
-      tools: content.filter(b => b.type === 'toolCall')
-        .map(b => ({ id: b.id, name: b.name, input: b.intent || summarize(b.name === 'yield' ? yieldText(b.arguments) : b.arguments), file: b.arguments?.path ?? b.arguments?.file_path,
-                     verdict: b.name === 'yield' ? yieldVerdict(b.arguments) : undefined })),
-      text: text.slice(0, 600) || undefined,
+      tools: content.filter(b => b.type === 'toolCall').map(b => {
+        const args = b.name === 'yield' ? yieldText(b.arguments) : b.arguments;
+        return { id: b.id, name: b.name, input: b.intent || summarize(args), full: fullInput(args), file: b.arguments?.path ?? b.arguments?.file_path,
+                 verdict: b.name === 'yield' ? yieldVerdict(b.arguments) : undefined };
+      }),
+      text: clip(text) || undefined,
       verdict: verdictOf(text),
-      error: m.stopReason === 'error' ? (m.errorMessage ?? 'model call failed').replace(/\s*\n\s*/g, ' · ').slice(0, 200) : undefined,
+      error: m.stopReason === 'error' ? clip((m.errorMessage ?? 'model call failed').replace(/\s*\n\s*/g, ' · ')) : undefined,
     };
   }
   if (m.role === 'toolResult') {
     // oh-my-pi's task tool names each subagent it ran (id = transcript file stem) and its agent type
     const metas = (m.details?.progress ?? []).filter(p => p.id).map(p => ({ a: (ctx.prefix ?? '') + p.id, meta: { agentType: p.agent, description: p.id } }));
-    return { t: 'r', ts: o.timestamp, results: [{ err: !!m.isError, msg: m.isError ? textOf(m.content).slice(0, 160) : undefined }], metas };
+    return { t: 'r', ts: o.timestamp, results: [{ err: !!m.isError, msg: m.isError ? clip(textOf(m.content)) : undefined }], metas };
   }
   const text = m.role === 'user' && !m.synthetic ? textOf(m.content).trim() : '';
-  return text ? { t: 'p', ts: o.timestamp, text: text.slice(0, 200), cwd: ctx.cwd } : null;
+  return text ? { t: 'p', ts: o.timestamp, text: clip(text), cwd: ctx.cwd } : null;
 }
 
 // The header (line 1 in pi, line 2 in oh-my-pi) holds the real cwd.

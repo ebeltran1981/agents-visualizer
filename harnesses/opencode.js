@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { summarize, verdictOf, tilde, every, installed } from './common.js';
+import { summarize, fullInput, clip, verdictOf, tilde, every, installed } from './common.js';
 
 let DatabaseSync;
 try { ({ DatabaseSync } = await import('node:sqlite')); } catch {}  // built in, unflagged since Node 22.13
@@ -59,16 +59,16 @@ function watch(key, push, end) {
         if (typeof d.cost === 'number') s.cost[m.id] = (s.cost[m.id] ?? 0) + d.cost;  // opencode prices each step itself
       } else if (d.type === 'text' && m.role === 'user' && !d.synthetic && d.text && !s.done.has(p.id)) {
         s.done.add(p.id);
-        batch.push({ a: s.agent, r: { t: 'p', ts: iso(p.time_created), text: d.text.trim().slice(0, 200), cwd: tilde(m.path?.cwd) } });
+        batch.push({ a: s.agent, r: { t: 'p', ts: iso(p.time_created), text: clip(d.text.trim()), cwd: tilde(m.path?.cwd) } });
       } else if (d.type === 'tool') {
         const st = d.state ?? {}, input = st.input ?? {};
         if (!s.done.has(p.id + ':call')) {
           s.done.add(p.id + ':call');
-          batch.push({ a: s.agent, r: a(m, st.time?.start ?? p.time_created, { tools: [{ id: d.callID, name: d.tool, input: st.title || summarize(input), file: input.filePath ?? input.path }] }) });
+          batch.push({ a: s.agent, r: a(m, st.time?.start ?? p.time_created, { tools: [{ id: d.callID, name: d.tool, input: st.title || summarize(input), full: fullInput(input), file: input.filePath ?? input.path }] }) });
         }
         if (st.status === 'completed' || st.status === 'error') {
           s.pending.delete(p.id);
-          batch.push({ a: s.agent, r: { t: 'r', ts: iso(st.time?.end ?? p.time_created), results: [{ err: st.status === 'error', msg: st.error?.slice?.(0, 160) }] } });
+          batch.push({ a: s.agent, r: { t: 'r', ts: iso(st.time?.end ?? p.time_created), results: [{ err: st.status === 'error', msg: st.error ? clip(String(st.error)) : undefined }] } });
         } else s.pending.add(p.id);
       }
     }
@@ -79,8 +79,8 @@ function watch(key, push, end) {
       s.done.add(m.id);
       const text = q("SELECT data FROM part WHERE message_id = ? AND json_extract(data, '$.type') = 'text' ORDER BY id").all(m.id)
         .map(r => json(r.data).text ?? '').join('\n');
-      batch.push({ a: s.agent, r: a(m, m.time.completed, { text: text.slice(0, 600) || undefined, verdict: verdictOf(text) }) });
-      if (m.error) batch.push({ a: s.agent, r: { t: 'r', ts: iso(m.time.completed), results: [{ err: true, msg: String(m.error.data?.message ?? m.error.name).slice(0, 160) }] } });
+      batch.push({ a: s.agent, r: a(m, m.time.completed, { text: clip(text) || undefined, verdict: verdictOf(text) }) });
+      if (m.error) batch.push({ a: s.agent, r: { t: 'r', ts: iso(m.time.completed), results: [{ err: true, msg: clip(String(m.error.data?.message ?? m.error.name)) }] } });
     }
   }
 

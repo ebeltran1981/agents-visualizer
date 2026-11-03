@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { tail, summarize, verdictOf, tilde, every, installed } from './common.js';
+import { tail, summarize, fullInput, clip, verdictOf, tilde, every, installed } from './common.js';
 
 const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const ROOT = path.join(HOME, 'projects');
@@ -26,16 +26,16 @@ export function slim(o) {
       adv: (u.iterations ?? []).filter(i => i.type === 'advisor_message').map(i => ({ model: i.model,
         u: { in: i.input_tokens ?? 0, out: i.output_tokens ?? 0, cr: i.cache_read_input_tokens ?? 0, cw: i.cache_creation_input_tokens ?? 0, cw1h: 0 } })),
       tools: content.filter(c => c.type === 'tool_use')
-        .map(c => ({ id: c.id, name: c.name, input: summarize(c.input), file: c.input?.file_path ?? c.input?.notebook_path })),
-      text: text.slice(0, 600) || undefined,
+        .map(c => ({ id: c.id, name: c.name, input: summarize(c.input), full: fullInput(c.input), file: c.input?.file_path ?? c.input?.notebook_path })),
+      text: clip(text) || undefined,
       verdict: verdictOf(text),
     };
   }
   if (o.type === 'user' && m) {
     const results = Array.isArray(m.content) ? m.content.filter(c => c.type === 'tool_result') : [];
-    if (results.length) return { t: 'r', ts: o.timestamp, results: results.map(r => ({ err: !!r.is_error, msg: r.is_error ? textOf(r.content).slice(0, 160) : undefined })) };
+    if (results.length) return { t: 'r', ts: o.timestamp, results: results.map(r => ({ err: !!r.is_error, msg: r.is_error ? clip(textOf(r.content)) : undefined })) };
     const text = textOf(m.content).trim();
-    if (!o.isMeta && text && !text.startsWith('<')) return { t: 'p', ts: o.timestamp, text: text.slice(0, 200), cwd: o.cwd };
+    if (!o.isMeta && text && !text.startsWith('<')) return { t: 'p', ts: o.timestamp, text: clip(text), cwd: o.cwd };
   }
   return null;
 }

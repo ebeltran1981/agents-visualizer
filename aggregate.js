@@ -64,8 +64,8 @@ export function shortModel(m) {
 const zero = () => ({ in: 0, out: 0, cr: 0, cw: 0, cw1h: 0 });
 const paidOf = c => ({ ...c, n: 1, inN: c.in == null ? 0 : 1 });
 
-// Retried errors differ only in a request id, so compare them without it.
-const errKey = msg => String(msg).replace(/\(ref: [^)]*\)|req_\w+/g, '');
+// Retried errors differ only in a request id, so compare them without it, on their start as the adapters once cut them.
+const errKey = msg => String(msg).slice(0, 160).replace(/\(ref: [^)]*\)|req_\w+/g, '');
 const addU = (a, b, k = 1) => { for (const f in a) a[f] += k * (b[f] ?? 0); };
 
 export function createState() {
@@ -92,7 +92,8 @@ export function ingestMeta(s, id, meta) {
 // Apply one slimmed record; returns new log rows.
 export function ingest(s, id, r) {
   const a = agentOf(s, id), rows = [];
-  const row = (action, detail, note = '', err = false) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), action, detail, note, err });
+  // detail is the row's text, kept short for the DOM; full is the whole message behind it
+  const row = (action, detail = '', note = '', err = false, full = detail) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), action, detail: detail.slice(0, 300), full, note, err });
   const check = kind => { s.checks[kind]++; s.lastCheck = { kind, ts: a.lastTs }; };
   const fail = msg => {
     const seen = s.errs.has(errKey(msg));
@@ -138,7 +139,7 @@ export function ingest(s, id, r) {
       a.usage.get(r.id).counted = true;
       s.adv.calls++;
       advisorCall(r.model, readTokens(r.u));
-      row('advisor', advise ? advise.input : r.text.split('\n').find(Boolean), family(r.model));
+      row('advisor', advise ? advise.input : r.text.split('\n').find(Boolean), family(r.model), false, advise ? advise.full : r.text);
     }
     return rows;
   }
@@ -163,11 +164,11 @@ export function ingest(s, id, r) {
       if (/^(edit|write|multiedit|notebookedit)$/i.test(t.name)) a.writes++;
       if (t.name === 'EnterPlanMode') check('plan');
       if (/^(SubagentHandback|yield)$/.test(t.name)) { a.done = true; a.final = t.input; a.verdict = t.verdict ?? a.verdict; }  // a subagent handing back its result
-      row(t.name, t.input, id === 'main' ? '' : `${family(a.model)} · ${a.effort}`);
+      row(t.name, t.input, id === 'main' ? '' : `${family(a.model)} · ${a.effort}`, false, t.full);
     }
     if (!r.tools.length) {
       a.lastKind = r.text ? 'text' : 'thinking';
-      if (r.text) { a.final = r.text; a.verdict = r.verdict; row('says', r.text.split('\n').find(Boolean)); }
+      if (r.text) { a.final = r.text; a.verdict = r.verdict; row('says', r.text.split('\n').find(Boolean), '', false, r.text); }
     }
     // a model call that failed outright (say, a retired model) ends the agent unless a later turn succeeds
     if (r.error) { fail(r.error); Object.assign(a, { lastKind: 'text', final: r.error, verdict: 'FAIL' }); }

@@ -25,12 +25,16 @@ export function cwdOf(file, prefix = '') {
   try { return raw && tilde(JSON.parse(raw)); } catch { return undefined; }
 }
 
-// One line describing a tool call's input.
-export function summarize(x = {}) {
-  const s = x.command ?? x.message ?? x.file_path ?? x.notebook_path ?? x.path ?? x.pattern ?? x.description ?? x.url ?? x.query
-    ?? x.prompt ?? x.skill ?? x.summary ?? Object.values(x).find(v => typeof v === 'string') ?? '';
-  return String(s).split('\n')[0].slice(0, 160);
-}
+// Whole text for the log's full-message view, capped so one huge record (a pasted log, say) can't bloat the stream.
+export const clip = s => s.length > 20_000 ? s.slice(0, 20_000) + '…' : s;
+
+// The input field a tool call is described by.
+const inputOf = (x = {}) => String(x.command ?? x.message ?? x.file_path ?? x.notebook_path ?? x.path ?? x.pattern ?? x.description ?? x.url ?? x.query
+  ?? x.prompt ?? x.skill ?? x.summary ?? Object.values(x).find(v => typeof v === 'string') ?? '');
+
+// One line describing a tool call's input, and the same field whole.
+export const summarize = x => inputOf(x).split('\n')[0].slice(0, 160);
+export const fullInput = x => clip(inputOf(x));
 
 // PASS or FAIL, only when it is the message's last line.
 export const verdictOf = text => text.trim().split('\n').pop().replace(/[*`_#\s]/g, '').match(/^(PASS|FAIL)$/)?.[1];

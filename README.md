@@ -51,7 +51,7 @@ What the dashboard shows:
 | Advisor | The advisor model, its three checkpoint pills, the number of real advisor calls, and the tokens and cost of those calls. |
 | Subagents | One card per subagent: model, type, effort, activity and state (working, idle, done, PASS or FAIL). |
 | The read bill | What the subagents' reading cost on their own models, compared with the same tokens on the main model. |
-| Session log | Every tool call, message, error and advisor call, with timestamps and day dividers. |
+| Session log | Every tool call, message, error and advisor call, with timestamps and day dividers. Hover a row whose text is cut off and click **full** to read the whole message. |
 | Footer | The reconstructed command line, the effort levels, the subagent count and the advisor's state. |
 
 ## Getting a multi-model session
