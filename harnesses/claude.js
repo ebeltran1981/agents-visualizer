@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { tail, summarize, fullInput, clip, verdictOf, tilde, every, installed } from './common.js';
+import { tail, summarize, fullInput, clip, verdictOf, tilde, every, installed, cwdOf } from './common.js';
 
 const HOME = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const ROOT = path.join(HOME, 'projects');
@@ -42,14 +42,7 @@ export function slim(o) {
   return null;
 }
 
-// Folder names turn '/' into '-', which is lossy, so read the real cwd from the transcript head.
-function cwdOf(file) {
-  const buf = Buffer.alloc(64 * 1024), fd = fs.openSync(file, 'r');
-  const head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0));
-  fs.closeSync(fd);
-  return tilde(head.match(/"cwd":"([^"]+)"/)?.[1]);
-}
-
+// Folder names turn '/' into '-', which is lossy, so each session's cwd is read from its transcript head.
 function listSessions(limit = 40) {
   const out = [];
   let projects = [];

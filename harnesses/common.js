@@ -19,8 +19,8 @@ export const inside = (root, p) => { const rel = path.relative(root, path.resolv
 // The cwd a session file records, read from its first bytes. JSON.parse undoes escaping such as C:\\Users.
 export function cwdOf(file, prefix = '') {
   const buf = Buffer.alloc(64 * 1024), fd = fs.openSync(file, 'r');
-  const head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0));
-  fs.closeSync(fd);
+  let head;
+  try { head = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, buf.length, 0)); } finally { fs.closeSync(fd); }
   const raw = head.match(new RegExp(prefix + '"cwd":("(?:[^"\\\\]|\\\\.)*")'))?.[1];
   try { return raw && tilde(JSON.parse(raw)); } catch { return undefined; }
 }
@@ -60,8 +60,7 @@ export function tail(file, onLine, onShrink) {
     const size = st.size;
     if (size === pos) return;
     const buf = Buffer.alloc(size - pos), fd = fs.openSync(file, 'r');
-    fs.readSync(fd, buf, 0, buf.length, pos);
-    fs.closeSync(fd);
+    try { fs.readSync(fd, buf, 0, buf.length, pos); } finally { fs.closeSync(fd); }
     pos = size;
     const lines = (rest + dec.write(buf)).split('\n');
     rest = lines.pop();
