@@ -21,9 +21,18 @@
   .sub, .dim { color: var(--dim); }
   .sub b { font-weight: 600; color: var(--c, var(--text)); }
   .controls { display: flex; flex-direction: column; align-items: end; gap: 8px; max-width: 100%; margin-left: auto; }  /* the session picker gets a line of its own */
-  .controls div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: end; }
+  .controls > div:first-child { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: end; }
   select { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px; font: inherit; max-width: 100%; }
-  #picker { min-width: 0; }  /* as wide as its longest entry, so its opened list is never wider than the box */
+  /* session picker: a button that opens a filter box and the list of sessions */
+  #picker { position: relative; max-width: 100%; }
+  #pickBtn { max-width: 100%; padding: 6px 8px; font-size: inherit; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #pickBtn::after { content: " ▾"; color: var(--dim); }
+  #pickPanel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; width: max-content; min-width: 100%; max-width: min(760px, calc(100vw - 32px));
+               background: var(--panel); border: 1px solid var(--dim); box-shadow: 0 8px 24px #000; }
+  #pickFilter { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 0; border-bottom: 1px solid var(--line); font: inherit; outline: 0; }
+  #pickList { max-height: 50vh; overflow-y: auto; }
+  .opt { padding: 4px 8px; cursor: pointer; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opt.on { color: var(--lime); } .opt.cur { background: #1d2a14; }
   label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
   input { accent-color: var(--lime); }
   h2 { display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 24px 0 8px; font-weight: 500; }
@@ -147,8 +156,8 @@
     .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
   }
   @media (max-width: 720px) {
-    body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { align-items: start; width: 100%; } .controls div { justify-content: start; }
-    #picker { width: 100%; } h1 { font-size: 32px; }
+    body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { align-items: start; width: 100%; } .controls > div:first-child { justify-content: start; }
+    #picker, #pickBtn { width: 100%; } #pickBtn { text-align: right; } #pickPanel { left: 0; } h1 { font-size: 32px; }
     .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; } .cstats { grid-template-columns: 1fr 1fr; }
     .ln { grid-template-columns: auto auto 1fr; gap: 0 10px; padding: 3px 12px; } .ln span:nth-child(4) { grid-column: 1 / -1; } .ln span:last-child { display: none; }
     select { max-width: 100%; } .costrow { grid-template-columns: 1fr auto; } footer { flex-direction: column; gap: 2px; padding: 6px 16px; }
@@ -165,7 +174,8 @@
     <select id="speed"><option value="5">5x</option><option value="20" selected>20x</option><option value="100">100x</option><option value="0">instant</option></select>
     <select id="harness" title="agent harness"></select>
     </div>
-    <select id="picker"></select>
+    <div id="picker"><button type="button" id="pickBtn"></button>
+      <div id="pickPanel" hidden><input id="pickFilter" type="search" placeholder="filter by folder, id or date…" autocomplete="off"><div id="pickList"></div></div></div>
   </div>
 </header>
 
@@ -588,7 +598,7 @@ function connect(session) {
   history.replaceState(null, '', '?' + params);
 }
 
-const picker = $('picker'), harnessPicker = $('harness');
+const picker = { value: '', items: [] }, harnessPicker = $('harness');  // items: { key, text }
 const { default: defHarness, harnesses } = await (await fetch('/api/harnesses')).json();
 for (const h of harnesses) harnessPicker.add(new Option(h.label, h.id));
 let harness, sessions = [];
@@ -602,25 +612,64 @@ async function pickHarness(id, session) {
   setText($('kicker'), `${harness.label} · session`);
   const r = await (await fetch(`/api/sessions?harness=${harness.id}`)).json();
   sessions = r.sessions;
-  picker.innerHTML = '';
-  for (const s of sessions) picker.add(new Option(`${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`, s.key));
+  picker.items = sessions.map(s => ({ key: s.key, text: `${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` }));
   const chosen = session || r.default;
-  picker.disabled = !chosen;
   if (!chosen) {
     reset();
     emptyMsg = r.note ?? `no ${harness.label} sessions in ${r.root}`;
-    picker.add(new Option(emptyMsg, ''));
+    showPicked('');
     params.set('harness', harness.id); params.delete('session');
     return history.replaceState(null, '', '?' + params);
   }
-  if (!sessions.some(s => s.key === chosen)) picker.add(new Option(chosen, chosen), 0);
-  picker.value = chosen;
+  if (!sessions.some(s => s.key === chosen)) picker.items.unshift({ key: chosen, text: chosen });
+  showPicked(chosen);
   $('replay').checked = params.has('replay') ? params.get('replay') === '1' : quiet(chosen);
   connect(chosen);
 }
 
 harnessPicker.onchange = () => { params.delete('replay'); pickHarness(harnessPicker.value); };
-picker.onchange = () => { params.delete('replay'); $('replay').checked = quiet(picker.value); connect(picker.value); };
+
+// The session picker. Typing filters the list: every word must appear in the entry.
+const pickPanel = $('pickPanel'), pickFilter = $('pickFilter'), pickList = $('pickList');
+function showPicked(key) {
+  picker.value = key;
+  $('pickBtn').textContent = key ? picker.items.find(i => i.key === key).text : emptyMsg;
+  $('pickBtn').disabled = !key;
+}
+function listSessions() {
+  const words = pickFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = picker.items.filter(i => words.every(w => i.text.toLowerCase().includes(w)));
+  pickList.innerHTML = hits.map(i => `<div class="opt${i.key === picker.value ? ' on' : ''}" data-key="${esc(i.key)}">${esc(i.text)}</div>`).join('') || '<div class="opt dim">no session matches</div>';
+  (pickList.querySelector('.on') ?? pickList.querySelector('[data-key]'))?.classList.add('cur');
+}
+const closePicker = () => { pickPanel.hidden = true; };
+function pick(key) {
+  closePicker();
+  $('pickBtn').focus();
+  if (!key || key === picker.value) return;
+  showPicked(key);
+  params.delete('replay'); $('replay').checked = quiet(key); connect(key);
+}
+$('pickBtn').onclick = () => {
+  if (!pickPanel.hidden) return closePicker();
+  pickPanel.hidden = false; pickFilter.value = ''; listSessions(); pickFilter.focus();
+  pickList.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
+};
+pickFilter.oninput = listSessions;
+pickFilter.onkeydown = e => {
+  const opts = [...pickList.querySelectorAll('[data-key]')], cur = pickList.querySelector('.cur'), i = opts.indexOf(cur);
+  if (e.key === 'Escape' || e.key === 'Enter') e.preventDefault();  // or Enter would also press the button the focus moves to
+  if (e.key === 'Escape') { closePicker(); $('pickBtn').focus(); }
+  else if (e.key === 'Enter') pick(cur?.dataset.key);
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const next = opts[Math.max(0, Math.min(opts.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    cur?.classList.remove('cur'); next?.classList.add('cur'); next?.scrollIntoView({ block: 'nearest' });
+  }
+};
+pickList.onclick = e => { const o = e.target.closest('[data-key]'); if (o) pick(o.dataset.key); };
+document.addEventListener('click', e => { if (!$('picker').contains(e.target)) closePicker(); });
+
 $('replay').onchange = () => { params.set('replay', $('replay').checked ? '1' : '0'); connect(picker.value); };
 $('speed').onchange = () => { speed = +$('speed').value; params.set('speed', speed); if (!speed) replaying = false; history.replaceState(null, '', '?' + params); };
 

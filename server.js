@@ -55,7 +55,7 @@ http.createServer((req, res) => {
     return json(res, { default: startHarness.id, harnesses: available().map(({ id, label, bin, root }) => ({ id, label, bin, root })) });
   }
   if (url.pathname === '/api/sessions') {
-    const sessions = harness.listSessions();
+    const sessions = harness.listSessions(200);
     return json(res, { default: (harness === startHarness && startSession) || sessions[0]?.key, root: harness.root, note: harness.note, sessions });
   }
   if (url.pathname === '/events') {
