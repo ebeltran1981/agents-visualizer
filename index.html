@@ -205,7 +205,7 @@
     <div><span class="big" id="cBreaks"></span><small id="cBreakNote"></small></div>
     <div><span class="big" id="cWarm"></span><small id="cWarmNote"></small></div>
   </div>
-  <div id="cSparkBox"><small>main's cached prefix per request · <span class="err">┊</span> a break</small><svg id="cSpark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg></div>
+  <div id="cSparkBox"><small><abbr title="How much of the main agent's context each request read back from the cache. It grows as the conversation grows.">main's cached context per request</abbr> · <span class="err">┊</span> <abbr data-break>a cache break</abbr></small><svg id="cSpark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg></div>
   <div class="billfoot"><span id="cStatus"></span><span id="cTtl"></span></div>
 </div>
 
@@ -227,6 +227,7 @@ const pct = n => n == null ? '—' : Math.round(100 * n) + '%';
 // "??" marks a cost nobody reported; hovering it says why
 const NO_COST = 'No cost: the API reports no cost for this model, and there is no price for it. Add one to prices.local.json.';
 const cost$ = n => n == null ? `<abbr title="${NO_COST}">??</abbr>` : fmt$(n);
+const BREAK = 'Cache break: the cache had expired (idle too long), the model changed, or the context was rewritten, so the next request paid to write the whole context into the cache again.';
 const money = n => n == null ? '—' : n < 0 ? '−' + fmt$(-n) : fmt$(n);
 const countdown = ms => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 const ago = ms => ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : ms < 86_400_000 ? `${(ms / 3_600_000).toFixed(1)} h` : `${Math.round(ms / 86_400_000)} days`;
@@ -427,8 +428,8 @@ function renderCache(now) {
     : `saved vs no cache, at list price${c.unpriced ? ` · ${c.unpriced} agents left out (no price)` : ''}`);
   setText($('cBreaks'), c.tracked ? String(c.breaks.length) : '—');
   $('cBreaks').classList.toggle('amber', c.breaks.length > 0);
-  setText($('cBreakNote'), !c.tracked ? `breaks · ${harness.label} records usage per message, not per request`
-    : c.breaks.length ? `breaks · rewrites cost ${money(c.breakCost)}` : 'breaks · the cache was never rebuilt');
+  setHTML($('cBreakNote'), `<abbr title="${BREAK}">breaks</abbr> · ` + (!c.tracked ? `${esc(harness.label)} records usage per message, not per request`
+    : c.breaks.length ? `rewrites cost ${money(c.breakCost)}` : 'the cache was never rebuilt'));
   setText($('cWarm'), c.warmupN ? money(c.warmup) : '—');
   setText($('cWarmNote'), c.warmupN ? `warm-up · ${c.warmupN} subagents' first requests` : 'warm-up · no subagents');
 
@@ -445,6 +446,8 @@ function renderCache(now) {
     : `<span class="cold">○ expired ${ago(-left)} ago</span>${rewrite}`);
   setText($('cTtl'), m.ttl ? `${m.ttl === 3_600_000 ? '1-hour' : '5-minute'} cache · each request restarts it` : '');
 }
+
+document.querySelector('[data-break]').title = BREAK;
 
 // Log: stick to the bottom unless the user scrolls up.
 const log = $('log');
