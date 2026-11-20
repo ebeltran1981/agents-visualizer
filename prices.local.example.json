@@ -1,5 +1,5 @@
 {
   "company-large": { "in": 3, "out": 15, "label": "large", "family": "large" },
-  "company-small": { "in": 0.5, "out": 2, "cacheRead": 0.05 },
+  "company-small": { "in": 0.5, "out": 2, "cacheRead": 0.05, "color": "#ff9f6a" },
   "claude-opus-5-5": { "in": 3.6, "out": 18, "cacheRead": 0.18, "cacheWrite": 4.5 }
 }

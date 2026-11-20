@@ -139,7 +139,7 @@
            padding: 8px 24px; display: flex; justify-content: space-between; gap: 16px; color: var(--dim); font-size: 12px; }
   footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer code { color: var(--lime); } footer b { color: var(--text); font-weight: 500; }
-  .opus { --c: var(--lime); } .sonnet { --c: var(--cyan); } .haiku { --c: var(--amber); } .fable, .mythos { --c: var(--pink); } .other { --c: #cfd4c8; }
+  [style*="--m:"] { --c: var(--m); }  /* --m is the model's colour, set inline; rules such as FAIL can still override --c */
   @media (max-width: 1000px) {
     .ln { grid-template-columns: 64px 100px 70px 1fr auto; }
     .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
@@ -216,7 +216,7 @@
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
-import { createState, ingest, ingestMeta, summary, cacheSummary, hitRate, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, CLAUDE_FAMILIES, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
+import { createState, ingest, ingestMeta, summary, cacheSummary, hitRate, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, colorOf, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
 import { markdown } from './markdown.js';
 
 const $ = id => document.getElementById(id);
@@ -240,7 +240,8 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
 const rate = m => { if (!m) return ''; const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
 const readRate = m => { const p = priceFor(m); return p ? `$${p.in.toFixed(2)} in · $${p.cacheRead.toFixed(2)} cached per 1M` : 'no price · add it to prices.local.json'; };
-const tint = f => CLAUDE_FAMILIES.includes(f) ? f : 'other';  // non-Claude models get a neutral colour
+const paint = (el, model) => el.style.setProperty('--m', colorOf(model) || null);  // null removes it
+const tintStyle = model => colorOf(model) ? `style="--m:${colorOf(model)}"` : '';
 const READ_ONLY = /explor|research|review|plan/i;
 const MAX_WAIT = 1000;  // replay never waits more than 1 s (real time) between events
 
@@ -305,7 +306,8 @@ function updateCard(parent, a, now) {
   const fresh = !el;
   if (fresh) parent.append(el = makeCard(a.id));
   const k = el.k, st = stateOf(a, now), [sym, v] = verb(a);
-  el.className = `card ${tint(family(a.model))}`;
+  el.className = 'card';
+  paint(el, a.model);
   setText(k.model, a.model ? shortModel(a.model) : 'starting…');
   setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
   setText(k.price, priceFor(a.model) ? rate(a.model) : a.paid.total > 0 ? 'reported cost' : rate(a.model));
@@ -343,15 +345,15 @@ function render() {
   setHTML($('title'), `${WORDS[n] ?? n} model${n === 1 ? '' : 's'}, <em>one session.</em>`);
   // One verb per model family: opus plans · sonnet edits · haiku reads · fable reviews
   const roles = {};
-  const add = (m, verb) => m && (roles[family(m)] ??= new Set()).add(verb);
+  const add = (m, verb) => m && (roles[family(m)] ??= { model: m, verbs: new Set() }).verbs.add(verb);
   add(s.main?.model, 'plans');
   s.subs.forEach(a => add(a.model, a.writes ? 'edits' : 'reads'));
   add(s.advModel, 'reviews');
-  setHTML($('roles'), Object.entries(roles).map(([f, v]) => `<b class="${tint(f)}">${esc(f)}</b> ${[...v].join(' + ')}`).join(' <span class="dim">·</span> ') || emptyMsg || 'waiting for transcript…');
+  setHTML($('roles'), Object.entries(roles).map(([f, r]) => `<b ${tintStyle(r.model)}>${esc(f)}</b> ${[...r.verbs].join(' + ')}`).join(' <span class="dim">·</span> ') || emptyMsg || 'waiting for transcript…');
 
   if (s.main) updateCard($('main'), s.main, now);
   const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv, rev = reviewing(state, now);
-  $('advisor').className = `card ${tint(family(adv))}`;
+  $('advisor').style.setProperty('--m', colorOf(adv) || '#cfd4c8');  // grey while there is no advisor
   $('advisor').dataset.state = rev ? 'working' : 'idle';
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
   setText($('advPrice'), !adv ? '' : priceFor(adv) ? rate(adv) : state.adv.paid.total > 0 ? 'reported cost' : rate(adv));
@@ -395,13 +397,13 @@ function render() {
   const mainC = s.main ? agentCost(s.main) : 0, advC = s.advCost;
   const subC = s.subs.some(a => agentCost(a) != null) ? Math.max(0, s.cost - (mainC ?? 0) - (advC ?? 0)) : null;
   const share = c => s.cost ? 100 * (c ?? 0) / s.cost : 0;
-  const part = (el, c, fam, name) => {
+  const part = (el, c, model, name) => {
     $(el).style.width = share(c) + '%';
-    $(el).className = fam ? tint(fam) : '';
-    return `<b class="${fam ? tint(fam) : ''}">${name}</b> ${cost$(c)}${c == null ? '' : ` (${Math.round(share(c))}%)`}`;
+    paint($(el), model);
+    return `<b ${tintStyle(model)}>${name}</b> ${cost$(c)}${c == null ? '' : ` (${Math.round(share(c))}%)`}`;
   };
-  setHTML($('costParts'), [part('costMain', mainC, family(s.mainModel), 'main'),
-    adv ? part('costAdv', advC, family(adv), 'advisor') : ($('costAdv').style.width = 0, ''),
+  setHTML($('costParts'), [part('costMain', mainC, s.mainModel, 'main'),
+    adv ? part('costAdv', advC, adv, 'advisor') : ($('costAdv').style.width = 0, ''),
     s.subs.length ? part('costSubs', subC, '', `${s.subs.length} subagents`) : ($('costSubs').style.width = 0, '')].filter(Boolean).join(' <span class="dim">·</span> '));
   setText($('logCwd'), basename(state.cwd));
   renderCache(now);
@@ -435,7 +437,7 @@ function renderCache(now) {
 
   const pts = m.series, max = Math.max(1, ...pts.map(p => p.cr)), x = i => (100 * i / Math.max(1, pts.length - 1)).toFixed(2);
   $('cSparkBox').hidden = pts.length < 2;
-  $('cSpark').setAttribute('class', tint(family(state.agents.get('main')?.model)));
+  paint($('cSpark'), state.agents.get('main')?.model);
   const line = pts.map((p, i) => `${x(i)},${(29 - 28 * p.cr / max).toFixed(2)}`).join(' ');
   setHTML($('cSpark'), `<polyline points="${line}"/>` + pts.map((p, i) => p.brk ? `<line x1="${x(i)}" x2="${x(i)}" y1="0" y2="30"/>` : '').join(''));
 
@@ -466,7 +468,8 @@ function appendLog(rows) {
       log.insertBefore(d, $('cursor'));
     }
     const el = document.createElement('div');
-    el.className = `ln ${tint(r.fam)}` + (r.err ? ' err' : r.action === 'cache' ? ' warn' : '');
+    el.className = 'ln' + (r.err ? ' err' : r.action === 'cache' ? ' warn' : '');
+    paint(el, r.model);
     el.title = r.ts;
     el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span><span class="dim">${esc(r.note)}</span>`;
     el.row = r;
@@ -491,7 +494,8 @@ const showRaw = raw => { $('fullText').hidden = !raw; $('fullMd').hidden = raw; 
 $('fullRaw').onclick = () => showRaw(!$('fullMd').hidden);
 more.onclick = () => {
   const r = more.closest('.ln').row, md = MARKDOWN.has(r.action);
-  $('full').className = tint(r.fam) + (r.err ? ' err' : '');
+  $('full').className = r.err ? 'err' : '';
+  paint($('full'), r.model);
   $('fullHead').innerHTML = `<span class="dim">${time(r.ts)}</span> <span class="model">${esc(r.agent)}</span> ${esc(r.action)} <span class="dim">${esc(r.note)}</span>`;
   $('fullText').textContent = r.full;
   $('fullMd').innerHTML = md ? markdown(r.full) : '';

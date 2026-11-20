@@ -116,7 +116,7 @@ The example below uses placeholder rates; replace them with yours.
 ```json
 {
   "company-large": { "in": 3, "out": 15, "label": "large", "family": "large" },
-  "company-small": { "in": 0.5, "out": 2, "cacheRead": 0.05 },
+  "company-small": { "in": 0.5, "out": 2, "cacheRead": 0.05, "color": "#ff9f6a" },
   "claude-opus-5-5": { "in": 3.6, "out": 18, "cacheRead": 0.18, "cacheWrite": 4.5 }
 }
 ```
@@ -124,6 +124,7 @@ The example below uses placeholder rates; replace them with yours.
 - Keys match model IDs as they appear in the transcripts, by prefix.
 - `in` and `out` are required. `cacheRead` and `cacheWrite` default to `in`.
 - `label` changes the name on the cards, and `family` changes the name used in the header and footer.
+- `color` sets the model's colour (any CSS colour). Without it, the colour comes from the model's family, as described below.
 - If the file isn't valid JSON, the server logs why in its terminal and ignores it.
 
 A model with no price shows `?`. Its tokens are left out of both sides of every cost comparison, and the session total shows as `≥ $…` so you know it's incomplete.
@@ -134,7 +135,8 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 
 - **Provider prefixes and suffixes are stripped** before matching prices and names, so `global.anthropic.claude-sonnet-5-5`, `us.anthropic.claude-opus-5-5-v1:0` and `claude-haiku-4-5@20251001` are recognised as Sonnet 5.5, Opus 5.5 and Haiku 4.5.
 - **Haiku 5.5 is billed by prompt length.** A request whose prompt is over 100,000 tokens costs 5x the listed rates. The dashboard prices an agent's totals at the base rate, so a Haiku card can understate its cost.
-- **Non-Claude models** appear under their own name (for example "gpt-5 edits"), in a neutral colour, and need an entry in `prices.local.json` to be priced.
+- **Non-Claude models** appear under their own name (for example "gpt-5 edits") and need an entry in `prices.local.json` to be priced.
+- **Colours** go by model family, in any harness. A family is recognized anywhere in the model's name, so `us.anthropic.claude-opus-5-5-v1:0`, `openai.gpt-5.2` and `kimi-k3.1-pro:cloud` are coloured as Opus, GPT and Kimi whatever the gateway adds around them. The known families are Opus, Sonnet, Haiku, Fable/Mythos, GPT, DeepSeek, Kimi, GLM, Nova, Qwen, MiniMax, Llama, Gemini, Mistral and Grok (the list is `FAMILY_COLORS` in `aggregate.js`). Any other model gets a colour picked from its name, the same one every time. Models of one family share a colour; use `color` in `prices.local.json` to tell them apart. Red is kept for errors and FAIL.
 - **The advisor is a server-side Anthropic tool.** Without an advisor, the card reads "no advisor" and counts 0 calls, but the checkpoint pills still light from plan mode, repeated errors and turn ends. Whether the advisor works through your gateway depends on its backend.
 
 ## Files

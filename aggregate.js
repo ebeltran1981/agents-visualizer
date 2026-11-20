@@ -60,6 +60,29 @@ export const hitRate = u => readTokens(u) ? u.cr / readTokens(u) : null;
 export const CLAUDE_FAMILIES = ['fable', 'mythos', 'opus', 'sonnet', 'haiku'];
 // Claude models group by family (opus, sonnet…); any other model stands for itself.
 export const family = m => local(m)?.family ?? baseModel(m).match(/^claude-([a-z]+)/)?.[1] ?? (baseModel(m) || '?');
+// One colour per model family. A family is found anywhere in the name (us.anthropic.claude-opus-5-5-v1:0, kimi-k3:cloud),
+// so gateway prefixes and suffixes don't matter. First match wins. Red is kept for errors.
+const FAMILY_COLORS = [
+  ['opus', '#b6f36a'], ['sonnet', '#6ad8f3'], ['haiku', '#f3c76a'], ['fable', '#f36ad8'], ['mythos', '#f36ad8'],
+  ['gpt', '#6af3b0'], ['codex', '#6af3b0'], ['deepseek', '#6a9df3'], ['kimi', '#a78bfa'], ['moonshot', '#a78bfa'],
+  ['glm', '#f3956a'], ['nova', '#ece76a'], ['titan', '#ece76a'], ['qwen', '#cf8af3'], ['minimax', '#5fd9c4'],
+  ['llama', '#d9c4a0'], ['gemini', '#8fb4ff'], ['gemma', '#8fb4ff'], ['mistral', '#ffb38a'], ['grok', '#e8ecdf'],
+];
+const PALETTE = ['#6af3b0', '#6a9df3', '#a78bfa', '#f3956a', '#ece76a', '#cf8af3', '#8fb4ff', '#5fd9c4'];
+
+// A model's colour: the one set in prices.local.json, else its family's, else one picked from its name.
+export function colorOf(m) {
+  if (!m) return '';
+  const own = local(m);
+  if (own?.color) return own.color;
+  const name = `${own?.family ?? ''} ${m}`.toLowerCase();
+  const known = FAMILY_COLORS.find(([f]) => name.includes(f));
+  if (known) return known[1];
+  let h = 0;
+  for (const ch of baseModel(m)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
 export function shortModel(m) {
   if (!m) return '';
   const id = baseModel(m);
@@ -99,7 +122,7 @@ export function ingestMeta(s, id, meta) {
 export function ingest(s, id, r) {
   const a = agentOf(s, id), rows = [];
   // detail is the row's text, kept short for the DOM; full is the whole message behind it
-  const row = (action, detail = '', note = '', err = false, full = detail) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), action, detail: detail.slice(0, 300), full, note, err });
+  const row = (action, detail = '', note = '', err = false, full = detail) => rows.push({ ts: r.ts, agent: label(a), fam: family(a.model), model: a.model, action, detail: detail.slice(0, 300), full, note, err });
   const check = kind => { s.checks[kind]++; s.lastCheck = { kind, ts: a.lastTs }; };
   const fail = msg => {
     const seen = s.errs.has(errKey(msg));
