@@ -24,7 +24,7 @@
   select { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px; font: inherit; max-width: 420px; }
   label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
   input { accent-color: var(--lime); }
-  h2 { display: flex; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 24px 0 8px; font-weight: 500; }
+  h2 { display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 24px 0 8px; font-weight: 500; }
   h2 span { text-transform: none; letter-spacing: 0; }
   .row { display: grid; grid-template-columns: 1.3fr 64px 1fr; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -71,7 +71,7 @@
   .link b { position: absolute; top: -2px; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--lime); opacity: 0; }
   .delegates { flex-direction: row; margin-top: 16px; padding: 0; }
   .delegates i { flex: 1; }
-  /* read bill */
+  /* delegation savings */
   .bill { background: var(--panel); border: 1px solid var(--line); padding: 14px; }
   .bar { display: grid; grid-template-columns: 230px 1fr 130px; gap: 12px; align-items: center; margin: 8px 0; }
   .bar small { display: block; color: var(--dim); font-size: 11px; }
@@ -83,6 +83,10 @@
   .billfoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 8px; color: var(--dim); font-size: 12px; }
   .x { display: inline-block; color: var(--bg); background: var(--lime); padding: 2px 8px; font-weight: 700; margin-left: 8px; white-space: nowrap; }
   .x:empty { display: none; }
+  /* session cost */
+  abbr { text-decoration: underline dotted; } abbr, [title^="No cost"] { cursor: help; }
+  .costrow { display: grid; grid-template-columns: 1fr 130px; gap: 12px; align-items: center; }
+  .stack { display: flex; } .stack i { height: 100%; width: 0; background: var(--c, var(--dim)); transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
   /* cache */
   .cstats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
   .cstats .big { display: block; text-align: left; }
@@ -106,7 +110,7 @@
            border: 1px solid var(--line); border-left: 3px solid var(--c, var(--lime)); }
   dialog::backdrop { background: rgba(0, 0, 0, .6); }
   :root:has(dialog[open]) { overflow: hidden; }  /* the page stays put while the dialog is open */
-  :root { scrollbar-gutter: stable; }
+  :root { scrollbar-gutter: stable; color-scheme: dark; }
   dialog .top { padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
   dialog form { display: flex; gap: 6px; }
   #fullText, #fullMd { margin: 0; padding: 12px 14px; max-height: calc(80vh - 50px); overflow: auto; overflow-wrap: anywhere; }
@@ -136,12 +140,16 @@
   footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   footer code { color: var(--lime); } footer b { color: var(--text); font-weight: 500; }
   .opus { --c: var(--lime); } .sonnet { --c: var(--cyan); } .haiku { --c: var(--amber); } .fable, .mythos { --c: var(--pink); } .other { --c: #cfd4c8; }
+  @media (max-width: 1000px) {
+    .ln { grid-template-columns: 64px 100px 70px 1fr auto; }
+    .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
+  }
   @media (max-width: 720px) {
     body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { justify-content: start; width: 100%; }
     #picker { flex: 1 1 100%; min-width: 0; } h1 { font-size: 32px; }
-    .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
     .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; } .cstats { grid-template-columns: 1fr 1fr; }
-    .ln { grid-template-columns: 60px 1fr; } .ln span:nth-child(n+3) { grid-column: 1 / -1; text-align: left; } select { max-width: 100%; }
+    .ln { grid-template-columns: auto auto 1fr; gap: 0 10px; padding: 3px 12px; } .ln span:nth-child(4) { grid-column: 1 / -1; } .ln span:last-child { display: none; }
+    select { max-width: 100%; } .costrow { grid-template-columns: 1fr auto; } footer { flex-direction: column; gap: 2px; padding: 6px 16px; }
   }
 </style>
 </head>
@@ -176,11 +184,17 @@
 <h2>Subagents</h2>
 <div class="grid" id="subs"></div>
 
-<h2>The read bill <span id="readTokens"></span></h2>
+<h2>Session cost</h2>
 <div class="bill">
-  <div class="bar"><span id="mainLabel"></span><div class="track"><div class="fill main" id="mainBar"></div></div><div class="big" id="mainCost"></div></div>
+  <div class="costrow"><div class="track stack"><i id="costMain"></i><i id="costAdv"></i><i id="costSubs"></i></div><div class="big"><span id="partial"></span><span id="total"></span></div></div>
+  <div class="billfoot"><span class="sub" id="costParts"></span><span id="unpriced"></span></div>
+</div>
+
+<h2>Delegation savings <span id="readTokens"></span></h2>
+<div class="bill">
   <div class="bar"><span id="actualLabel"></span><div class="track"><div class="fill" id="actualBar"></div></div><div class="big lime" id="actualCost"></div></div>
-  <div class="billfoot"><span>same tokens × list price · session total <span id="partial"></span><b id="total"></b> vs <b id="totalIfMain"></b> if all on the main model <span id="unpriced"></span></span><span class="x" id="ratio"></span></div>
+  <div class="bar"><span id="mainLabel"></span><div class="track"><div class="fill main" id="mainBar"></div></div><div class="big" id="mainCost"></div></div>
+  <div class="billfoot"><span>input tokens only, at list price · already counted in the session cost above · the whole session on the main model: <b id="totalIfMain"></b></span><span class="x" id="ratio"></span></div>
 </div>
 
 <h2>The cache <span id="cacheTokens"></span></h2>
@@ -206,10 +220,13 @@ import { createState, ingest, ingestMeta, summary, cacheSummary, hitRate, stateO
 import { markdown } from './markdown.js';
 
 const $ = id => document.getElementById(id);
-const fmt$ = n => n == null ? '?' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
+const fmt$ = n => n == null ? '??' : n > 0 && n < 0.005 ? '<$0.01' : '$' + (n < 10 ? n.toFixed(2) : n.toFixed(1));
 const fmtK = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
 const fmtN = n => String(Math.round(n));
 const pct = n => n == null ? '—' : Math.round(100 * n) + '%';
+// "??" marks a cost nobody reported; hovering it says why
+const NO_COST = 'No cost: the API reports no cost for this model, and there is no price for it. Add one to prices.local.json.';
+const cost$ = n => n == null ? `<abbr title="${NO_COST}">??</abbr>` : fmt$(n);
 const money = n => n == null ? '—' : n < 0 ? '−' + fmt$(-n) : fmt$(n);
 const countdown = ms => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 const ago = ms => ms < 3_600_000 ? `${Math.round(ms / 60_000)} min` : ms < 86_400_000 ? `${(ms / 3_600_000).toFixed(1)} h` : `${Math.round(ms / 86_400_000)} days`;
@@ -233,6 +250,7 @@ $('speed').value = String(speed);
 
 // Count from the value on screen to `to` over 600 ms.
 function tween(el, to, fmt) {
+  if (fmt === fmt$) el.title = to == null ? NO_COST : '';
   if (to == null) return setText(el, fmt(to));
   if (el._to === to) return;
   el._to = to;
@@ -289,7 +307,7 @@ function updateCard(parent, a, now) {
   el.className = `card ${tint(family(a.model))}`;
   setText(k.model, a.model ? shortModel(a.model) : 'starting…');
   setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
-  setText(k.price, priceFor(a.model) ? rate(a.model) : a.paid.n ? 'reported cost' : rate(a.model));
+  setText(k.price, priceFor(a.model) ? rate(a.model) : a.paid.total > 0 ? 'reported cost' : rate(a.model));
   setText(k.state, st);
   setText(k.desc, a.desc || (a.id === 'main' ? `leads the session in ${basename(state.cwd)}` : ''));
   setText(k.effort, a.effort || '—');
@@ -335,7 +353,7 @@ function render() {
   $('advisor').className = `card ${tint(family(adv))}`;
   $('advisor').dataset.state = rev ? 'working' : 'idle';
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
-  setText($('advPrice'), !adv ? '' : priceFor(adv) ? rate(adv) : state.adv.paid.n ? 'reported cost' : rate(adv));
+  setText($('advPrice'), !adv ? '' : priceFor(adv) ? rate(adv) : state.adv.paid.total > 0 ? 'reported cost' : rate(adv));
   for (const [id, kind] of [['ckPlan', 'plan'], ['ckRepeat', 'repeat'], ['ckDone', 'done']]) {
     const el = $(id), on = c[kind] > 0;
     if (on !== el.classList.contains('on')) { el.classList.toggle('on', on); if (on) pop(el); }
@@ -351,27 +369,39 @@ function render() {
   const recent = now - Math.max(lc?.ts ?? 0, call.ts) < 60_000;
   const advState = rev ? 'reviewing' : !recent ? 'quiet' : called ? 'replied' : 'checkpoint';
   setText($('advQuiet'), { reviewing: '● reviewing', replied: '● replied', checkpoint: '● checkpoint reached', quiet: `○ quiet until ${family(s.main?.model)} asks` }[advState]);
-  setText($('advSpend'), call.calls || rev ? `${fmtK(readTokens(call.u))} read · ${fmt$(s.advCost)}` : '');
+  setHTML($('advSpend'), call.calls || rev ? `${fmtK(readTokens(call.u))} read · ${cost$(s.advCost)}` : '');
   const calls = String(call.calls);
   if ($('advCalls').textContent !== calls) { if ($('advCalls').textContent) pop($('advCalls'), 1.3); $('advCalls').textContent = calls; }
   s.subs.forEach(a => updateCard($('subs'), a, now));
 
   const max = Math.max(s.readCost, s.readCostIfMain) || 1;
-  setHTML($('readTokens'), `input tokens read by subagents <b>${fmtK(s.readTokens)}</b>${s.unpricedSubs ? ` · ${s.unpricedSubs} left out (no input price)` : ''}`);
+  setHTML($('readTokens'), `what handing the reading to subagents saved · they read <b>${fmtK(s.readTokens)}</b> tokens${s.unpricedSubs ? ` · ${s.unpricedSubs} left out (no input price)` : ''}`);
   const subModels = [...new Set(s.readSubs.map(a => a.model))];
-  setHTML($('mainLabel'), `on ${esc(shortModel(s.mainModel))}<small>${esc(readRate(s.mainModel))}</small>`);
-  setHTML($('actualLabel'), `on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? (priceFor(subModels[0]) ? readRate(subModels[0]) : `cost reported by ${harness.label}`) : subModels.length ? 'mixed rates' : '')}</small>`);
+  setHTML($('mainLabel'), `if ${esc(shortModel(s.mainModel))} had read it<small>${esc(readRate(s.mainModel))}</small>`);
+  setHTML($('actualLabel'), `subagents read it on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? (priceFor(subModels[0]) ? readRate(subModels[0]) : `cost reported by ${harness.label}`) : subModels.length ? 'mixed rates' : '')}</small>`);
   $('actualBar').style.width = (100 * s.readCost / max) + '%';
   $('mainBar').style.width = (100 * s.readCostIfMain / max) + '%';
   tween($('actualCost'), s.readCost, fmt$);
   tween($('mainCost'), s.readCostIfMain, fmt$);
-  tween($('total'), s.cost, fmt$);
+  tween($('total'), s.cost || !s.partial ? s.cost : null, fmt$);  // nothing priced at all: ??
   tween($('totalIfMain'), s.costIfMain, fmt$);
   const x = s.readCost && s.readCostIfMain ? s.readCostIfMain / s.readCost : 0;
-  const ratio = !x ? '' : x >= 1.05 ? x.toFixed(1) + '× less' : 'same price';
+  const ratio = !x ? '' : x >= 1.05 ? x.toFixed(1) + '× cheaper' : 'same price';
   if ($('ratio').textContent !== ratio) { $('ratio').textContent = ratio; if (ratio) pop($('ratio')); }
-  setText($('partial'), s.partial ? '≥ ' : '');
-  setText($('unpriced'), s.partial ? `· no price for ${s.unpriced.join(', ')}: add them to prices.local.json` : '');
+  setText($('partial'), s.partial && s.cost ? '≥ ' : '');
+  setText($('unpriced'), s.partial ? `no price for ${s.unpriced.join(', ')}: add them to prices.local.json` : '');
+  // who spent it: main, advisor, subagents
+  const mainC = s.main ? agentCost(s.main) : 0, advC = s.advCost;
+  const subC = s.subs.some(a => agentCost(a) != null) ? Math.max(0, s.cost - (mainC ?? 0) - (advC ?? 0)) : null;
+  const share = c => s.cost ? 100 * (c ?? 0) / s.cost : 0;
+  const part = (el, c, fam, name) => {
+    $(el).style.width = share(c) + '%';
+    $(el).className = fam ? tint(fam) : '';
+    return `<b class="${fam ? tint(fam) : ''}">${name}</b> ${cost$(c)}${c == null ? '' : ` (${Math.round(share(c))}%)`}`;
+  };
+  setHTML($('costParts'), [part('costMain', mainC, family(s.mainModel), 'main'),
+    adv ? part('costAdv', advC, family(adv), 'advisor') : ($('costAdv').style.width = 0, ''),
+    s.subs.length ? part('costSubs', subC, '', `${s.subs.length} subagents`) : ($('costSubs').style.width = 0, '')].filter(Boolean).join(' <span class="dim">·</span> '));
   setText($('logCwd'), basename(state.cwd));
   renderCache(now);
 
@@ -409,7 +439,7 @@ function renderCache(now) {
   setHTML($('cSpark'), `<polyline points="${line}"/>` + pts.map((p, i) => p.brk ? `<line x1="${x(i)}" x2="${x(i)}" y1="0" y2="30"/>` : '').join(''));
 
   const left = m.expiresAt - now;
-  const rewrite = m.prefix ? ` · main's next turn rewrites ~<b>${fmtK(m.prefix)}</b> tokens (~${fmt$(m.rewriteCost)})` : '';
+  const rewrite = m.prefix ? ` · main's next turn rewrites ~<b>${fmtK(m.prefix)}</b> tokens (~${cost$(m.rewriteCost)})` : '';
   setHTML($('cStatus'), !m.expiresAt ? (c.u.cr ? `<span class="dim">main's model reports no cache writes (it caches automatically), so there is no lifetime to count down</span>` : '')
     : left > 0 ? `<span class="warm">● warm</span> · main's cache expires in <b>${countdown(left)}</b>`
     : `<span class="cold">○ expired ${ago(-left)} ago</span>${rewrite}`);

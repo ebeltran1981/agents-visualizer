@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, ingest, cacheSummary, hitRate } from '../aggregate.js';
+import { createState, ingest, cacheSummary, hitRate, summary, agentCost } from '../aggregate.js';
 
 const OPUS = 'claude-opus-5-5';  // $4 in, $0.20 cache read, $5 5-minute write, $8 1-hour write per 1M
 const T0 = Date.parse('2026-11-03T10:00:00Z');
@@ -120,4 +120,12 @@ test('subagent warm-up is the cost of each subagent first, uncached request', ()
   ingest(s, 'a1', msg('s2', 2, { cr: 20_000, cw: 500 }));
   // 100 × $4 + 20k × $5 per 1M
   assert.equal(cacheSummary(s).warmup.toFixed(4), '0.1004');
+});
+
+test('a harness that reports a cost of 0 for an unpriced model has no cost, not a free one', () => {
+  const { s } = run([{ ...msg('m1', 0, { in: 5_000 }, 'deepseek-v4-pro'), cost: { total: 0, in: 0 } }]);
+  assert.equal(agentCost(s.agents.get('main')), null);
+  assert.deepEqual(summary(s).unpriced, ['deepseek-v4-pro']);
+  const paid = run([{ ...msg('m1', 0, { in: 5_000 }, 'deepseek-v4-pro'), cost: { total: 0.02, in: 0.01 } }]).s;
+  assert.equal(agentCost(paid.agents.get('main')), 0.02);
 });

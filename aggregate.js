@@ -3,6 +3,7 @@
 // USD per 1M tokens. cacheWrite = 5-minute TTL write; 1-hour writes are billed at 2x input.
 // Unknown models show "?" instead of a guessed price; add your own in prices.local.json.
 export const PRICES = {
+  'claude-fable-5-2':  { in: 8,  out: 40, cacheRead: 0.20, cacheWrite: 10 },
   'claude-fable-5-1':  { in: 10, out: 50, cacheRead: 0.25, cacheWrite: 12.5 },
   'claude-fable-5':    { in: 10, out: 50, cacheRead: 1.00, cacheWrite: 12.5 },
   'claude-opus-5-5':   { in: 4,  out: 20, cacheRead: 0.20, cacheWrite: 5 },
@@ -47,11 +48,12 @@ export function cost(model, u) {
 }
 
 // Your local prices first, then the cost the harness reported (pi and its forks record it), then the list price.
-const usesPaid = a => a.paid.n > 0 && !local(a.model);
+// A reported total of exactly 0 (pi with a model that has no price) is no cost at all, not a free session.
+const usesPaid = a => a.paid.total > 0 && !local(a.model);
 export const agentCost = a => usesPaid(a) ? a.paid.total : cost(a.model, a.u);
 // Only pi-family harnesses split their cost into input and output; otherwise fall back to the price table.
 const agentInputCost = a => usesPaid(a) && a.paid.inN === a.paid.n ? a.paid.in : inputCost(a.model, a.u);
-export const priced = a => a.paid.n > 0 || !!priceFor(a.model);
+export const priced = a => a.paid.total > 0 || !!priceFor(a.model);
 
 export const readTokens = u => u.in + u.cr + u.cw + u.cw1h;
 export const hitRate = u => readTokens(u) ? u.cr / readTokens(u) : null;
@@ -267,8 +269,8 @@ export function summary(s) {
   const mainModel = main?.model, advModel = s.adv.model || main?.advisor, mainPriced = !!priceFor(mainModel);
   const sum = (list, f) => list.reduce((t, a) => t + (f(a) ?? 0), 0);
   // Agents on unpriced models are left out of both sides of every comparison, and the totals are marked partial.
-  const pricedAll = all.filter(priced), pricedSubs = subs.filter(a => agentInputCost(a) != null);  // the read bill needs input cost
-  const advCost = s.adv.paid.n && !local(advModel) ? s.adv.paid.total : cost(advModel, s.adv.u);  // reported cost first, as for agents
+  const pricedAll = all.filter(priced), pricedSubs = subs.filter(a => agentInputCost(a) != null);  // delegation savings need input cost
+  const advCost = s.adv.paid.total > 0 && !local(advModel) ? s.adv.paid.total : cost(advModel, s.adv.u);  // reported cost first, as for agents
   const unpriced = [...new Set(all.filter(a => !priced(a)).map(a => a.model).concat(s.adv.calls && advCost == null ? advModel : []).filter(Boolean))];
   return {
     main, subs, mainModel, advModel, unpriced, partial: unpriced.length > 0, readSubs: pricedSubs, unpricedSubs: subs.length - pricedSubs.length,
