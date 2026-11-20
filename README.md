@@ -14,12 +14,13 @@ It only reads the session files each harness already writes, and never writes in
 | oh-my-pi | `~/.omp/agent/sessions/<cwd>/<timestamp>_<id>.jsonl`, with subagents in the same-named folder as `<Name>.jsonl` |
 | pi | `~/.pi/agent/sessions/--<cwd>--/<timestamp>_<id>.jsonl` (or `$PI_CODING_AGENT_DIR/sessions`); pi has no built-in subagents |
 | opencode | the SQLite database `~/.local/share/opencode/opencode.db` (or `$OPENCODE_DB`); subagents are child sessions |
+| codex | `~/.codex/state_<n>.sqlite` (or `$CODEX_HOME`) for the list of sessions, and the JSONL transcript each one points to under `~/.codex/sessions/`; subagents are threads of their own |
 
 ## Privacy
 
 agents-visualizer collects nothing and stores nothing. Everything the dashboard shows is read from the session files your harnesses already keep on this computer, at the moment it is shown.
 
-- **Read-only.** It opens session files, and opencode's database, for reading only. It never writes to them or to any other file.
+- **Read-only.** It opens session files, and opencode's and codex's databases, for reading only. It never writes to them or to any other file.
 - **Nothing stored.** It has no database, cache or log file of its own, and the page uses no cookies or browser storage. What you see lives in the page's memory and is gone when you close the tab. The one trace is your browser history, which keeps the page URL with the harness and session path.
 - **Nothing sent.** The server listens only on `127.0.0.1`, so other computers can't reach it. Neither the server nor the page contacts any outside service: no telemetry, analytics, CDN or web fonts.
 - **No dependencies.** It runs on Node's standard library alone, so there is no third-party code that could do otherwise.
@@ -28,7 +29,7 @@ This covers agents-visualizer only. The harnesses themselves send your prompts t
 
 ## Setup
 
-You need Node 22.13 or later (opencode support uses Node's built-in SQLite), and Claude Code installed on the same computer, since the dashboard reads its transcripts. There is nothing to install.
+You need Node 22.13 or later (opencode and codex support use Node's built-in SQLite), and Claude Code installed on the same computer, since the dashboard reads its transcripts. There is nothing to install.
 
 ```sh
 git clone git@github.com:ebeltran1981/agents-visualizer.git
@@ -42,13 +43,13 @@ Start the server, then open http://localhost:4321.
 
 ```sh
 node server.js                       # opens the most recently modified session
-node server.js --harness omp         # starts on another harness: claude (default), omp, pi or opencode
+node server.js --harness omp         # starts on another harness: claude (default), omp, pi, opencode or codex
 node server.js --session <id|path>   # opens a specific session
 PORT=5000 node server.js             # uses another port
 CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn't in ~/.claude
 ```
 
-- **Pick a harness** with the first dropdown in the top right. It lists only the harnesses installed on this computer: those whose CLI (`claude`, `omp`, `pi`, `opencode`) is on `PATH` or whose data folder exists. `--harness` adds one regardless. Then **pick a session** with the second. It lists that harness's 40 most recent sessions on this computer, labelled by project folder and session id. A harness with no sessions says where it looked.
+- **Pick a harness** with the first dropdown in the top right. It lists only the harnesses installed on this computer: those whose CLI (`claude`, `omp`, `pi`, `opencode`, `codex`) is on `PATH` or whose data folder exists. `--harness` adds one regardless. Then **pick a session** with the second. It lists that harness's 40 most recent sessions on this computer, labelled by project folder and session id. A harness with no sessions says where it looked.
 - **Live sessions** stream in as Claude Code writes them. Leave the dashboard open while you work in another terminal.
 - **Finished sessions** replay by default (any session quiet for 60 s). Choose 5x, 20x or 100x, or "instant" to load everything at once. Untick "replay" to load without playback.
 - **URL parameters** make a view shareable or scriptable: `?session=<path>&replay=1&speed=20`.
@@ -160,6 +161,7 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 - **oh-my-pi** records the cost of each message itself. The dashboard uses that unless `prices.local.json` has the model. Subagents are named after their file (for example "BackendArch") and get their agent type (for example "scout") once the parent's `task` call returns. They count as done when they call `yield`, and show PASS or FAIL when its data has that status or result. With `--advisor`, the advisor's own transcript (`__advisor.jsonl`) feeds the advisor panel: each finished review is one call. A review ends with an `advise` call (its note becomes the log row) or with a text reply such as "I'm not sending any advice". A failed model call (say, a retired model) shows as an error and marks the agent FAIL. Not yet counted: the small cost of omp's automatic thinking-level judge.
 - **pi** uses the same parser as oh-my-pi. Sessions saved with `--session-dir` or a custom `sessionDir` setting aren't listed. Checked on a real pi 1.1.0 session: its tokens and tool calls match pi's own file exactly. pi records the cost it knows; models added in `~/.pi/agent/models.json` without a `cost` show as `??`, since a reported cost of 0 counts as no cost.
 - **opencode** sessions are read from its SQLite database without writing to it. While opencode is running, the dashboard opens the database read-only and sees new rows as they land. Otherwise it opens the file as immutable, so no `-wal` or `-shm` files are created next to it. Costs come from opencode's own per-step pricing unless `prices.local.json` has the model; opencode doesn't split cost into input and output, so its subagents appear under delegation savings only when the price table knows their model. Checked on a real 10-subagent run: its token totals match opencode's own session totals exactly.
+- **codex** lists sessions from its state database (opened read-only, as for opencode) and reads each session's JSONL transcript. Everything runs through one `exec_command` tool, so the dashboard names each call by what the command does: `read` for `cat`/`sed -n` of one file, `edit` for `apply_patch` and heredoc writes, `bash` otherwise. Subagents are named by codex ("Hume", "Godel") and described by their task. A subagent's transcript starts with a replay of its parent's messages, which is skipped. Codex records no cost, so costs show `??` unless `prices.local.json` has the model. The main agent's effort shows only when codex records it. Checked on real sessions run through Ollama (`ollama launch codex`) with 10 subagents.
 - **Cache metrics.** The hit rate is cache reads over all input tokens. "Saved" is the cache-read discount minus the write premium (1-hour writes cost twice the input price), at list price, so it needs prices. A **break** is a request that reads back less than half of what the previous request left cached and sends over 1k uncached tokens (cache writes plus fresh input, since providers with automatic caching report a miss as fresh input). Its cause is a model change, an idle gap longer than the cache's lifetime, or otherwise "context changed" (a compaction, say). The lifetime is 1 hour once an agent writes to the 1-hour cache, 5 minutes if it writes only 5-minute entries, and each request restarts it. Breaks are checked only on single model requests. Claude Code messages that call the advisor add up two model runs, and opencode adds up a message's steps, so those messages keep the cache warm but are not compared. The countdown depends on the model, not the harness: Claude models report cache writes in every harness, while providers that cache automatically (the DeepSeek, Kimi and MiniMax runs, say) report none, so they get hit rate and breaks but no countdown.
 - If the server restarts or a session file is rewritten, the page reconnects and rebuilds from scratch, so nothing is counted twice.
 

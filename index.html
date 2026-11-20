@@ -382,7 +382,7 @@ function render() {
   setHTML($('actualLabel'), `subagents read it on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? (priceFor(subModels[0]) ? readRate(subModels[0]) : `cost reported by ${harness.label}`) : subModels.length ? 'mixed rates' : '')}</small>`);
   $('actualBar').style.width = (100 * s.readCost / max) + '%';
   $('mainBar').style.width = (100 * s.readCostIfMain / max) + '%';
-  tween($('actualCost'), s.readCost, fmt$);
+  tween($('actualCost'), s.readSubs.length || !s.subs.length ? s.readCost : null, fmt$);  // no priced subagent: ??
   tween($('mainCost'), s.readCostIfMain, fmt$);
   tween($('total'), s.cost || !s.partial ? s.cost : null, fmt$);  // nothing priced at all: ??
   tween($('totalIfMain'), s.costIfMain, fmt$);

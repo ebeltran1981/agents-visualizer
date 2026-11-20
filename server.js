@@ -8,8 +8,9 @@ import claude from './harnesses/claude.js';
 import omp from './harnesses/omp.js';
 import pi from './harnesses/pi.js';
 import opencode from './harnesses/opencode.js';
+import codex from './harnesses/codex.js';
 
-const ALL = [claude, omp, pi, opencode];
+const ALL = [claude, omp, pi, opencode, codex];
 const HARNESSES = Object.fromEntries(ALL.map(h => [h.id, h]));
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORT = +(process.env.PORT || 4321);
