@@ -192,9 +192,12 @@
 
 <h2>Delegation savings <span id="readTokens"></span></h2>
 <div class="bill">
+  <div class="dim" id="savingsNone" hidden></div>
+  <div id="savingsBody">
   <div class="bar"><span id="actualLabel"></span><div class="track"><div class="fill" id="actualBar"></div></div><div class="big lime" id="actualCost"></div></div>
   <div class="bar"><span id="mainLabel"></span><div class="track"><div class="fill main" id="mainBar"></div></div><div class="big" id="mainCost"></div></div>
   <div class="billfoot"><span>input tokens only, at list price · already counted in the session cost above · the whole session on the main model: <b id="totalIfMain"></b></span><span class="x" id="ratio"></span></div>
+  </div>
 </div>
 
 <h2>The cache <span id="cacheTokens"></span></h2>
@@ -378,7 +381,14 @@ function render() {
   s.subs.forEach(a => updateCard($('subs'), a, now));
 
   const max = Math.max(s.readCost, s.readCostIfMain) || 1;
-  setHTML($('readTokens'), `what handing the reading to subagents saved · they read <b>${fmtK(s.readTokens)}</b> tokens${s.unpricedSubs ? ` · ${s.unpricedSubs} left out (no input price)` : ''}`);
+  // when there is nothing to compare, say why instead of showing empty bars
+  const noPrice = [...new Set(s.subs.filter(a => !s.readSubs.includes(a)).map(a => shortModel(a.model)).filter(Boolean))].join(', ');
+  const none = !s.subs.length ? 'No subagents in this session, so nothing was delegated.'
+    : !s.readSubs.length ? `Nothing to compare: the subagents' input cost is unknown. ${harness.label} doesn't report it, and there is no price for ${noPrice || 'their models'}. Add prices to prices.local.json.`
+    : s.readCostIfMain == null ? `The subagents' reading cost ${fmt$(s.readCost)} on their own models. There is nothing to compare it with: the main model, ${shortModel(s.mainModel)}, has no price. Add it to prices.local.json.` : '';
+  setText($('savingsNone'), none);
+  $('savingsNone').hidden = !none; $('savingsBody').hidden = !!none;
+  setHTML($('readTokens'), none ? '' : `what handing the reading to subagents saved · they read <b>${fmtK(s.readTokens)}</b> tokens${s.unpricedSubs ? ` · ${s.unpricedSubs} left out (no input price)` : ''}`);
   const subModels = [...new Set(s.readSubs.map(a => a.model))];
   setHTML($('mainLabel'), `if ${esc(shortModel(s.mainModel))} had read it<small>${esc(readRate(s.mainModel))}</small>`);
   setHTML($('actualLabel'), `subagents read it on ${esc(subModels.map(shortModel).join(' + ') || '—')}<small>${esc(subModels.length === 1 ? (priceFor(subModels[0]) ? readRate(subModels[0]) : `cost reported by ${harness.label}`) : subModels.length ? 'mixed rates' : '')}</small>`);
