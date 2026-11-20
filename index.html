@@ -14,14 +14,16 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); padding: 20px 24px 64px; }
-  header { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
+  header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 18px; }
   .kicker { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
   h1 { margin: 2px 0 4px; font: 400 40px/1.05 var(--serif); letter-spacing: -.5px; }
   h1 em { color: var(--lime); }
   .sub, .dim { color: var(--dim); }
   .sub b { font-weight: 600; color: var(--c, var(--text)); }
-  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: end; }
-  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px; font: inherit; max-width: 420px; }
+  .controls { display: flex; flex-direction: column; align-items: end; gap: 8px; max-width: 100%; margin-left: auto; }  /* the session picker gets a line of its own */
+  .controls div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: end; }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 6px; font: inherit; max-width: 100%; }
+  #picker { min-width: 0; }  /* as wide as its longest entry, so its opened list is never wider than the box */
   label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
   input { accent-color: var(--lime); }
   h2 { display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 24px 0 8px; font-weight: 500; }
@@ -145,8 +147,8 @@
     .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
   }
   @media (max-width: 720px) {
-    body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { justify-content: start; width: 100%; }
-    #picker { flex: 1 1 100%; min-width: 0; } h1 { font-size: 32px; }
+    body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { align-items: start; width: 100%; } .controls div { justify-content: start; }
+    #picker { width: 100%; } h1 { font-size: 32px; }
     .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; } .cstats { grid-template-columns: 1fr 1fr; }
     .ln { grid-template-columns: auto auto 1fr; gap: 0 10px; padding: 3px 12px; } .ln span:nth-child(4) { grid-column: 1 / -1; } .ln span:last-child { display: none; }
     select { max-width: 100%; } .costrow { grid-template-columns: 1fr auto; } footer { flex-direction: column; gap: 2px; padding: 6px 16px; }
@@ -157,10 +159,12 @@
 <header>
   <div><div class="kicker" id="kicker">session</div><h1 id="title">— models, <em>one session.</em></h1><div class="sub" id="roles">connecting…</div></div>
   <div class="controls">
+    <div>
     <span class="dim" id="progress"></span>
     <label><input type="checkbox" id="replay"> replay</label>
     <select id="speed"><option value="5">5x</option><option value="20" selected>20x</option><option value="100">100x</option><option value="0">instant</option></select>
     <select id="harness" title="agent harness"></select>
+    </div>
     <select id="picker"></select>
   </div>
 </header>
@@ -599,7 +603,7 @@ async function pickHarness(id, session) {
   const r = await (await fetch(`/api/sessions?harness=${harness.id}`)).json();
   sessions = r.sessions;
   picker.innerHTML = '';
-  for (const s of sessions) picker.add(new Option(`${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString()}`, s.key));
+  for (const s of sessions) picker.add(new Option(`${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`, s.key));
   const chosen = session || r.default;
   picker.disabled = !chosen;
   if (!chosen) {
