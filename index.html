@@ -108,10 +108,10 @@
   #cSpark line { stroke: var(--red); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
   .warm { color: var(--lime); } .cold { color: var(--amber); }
   /* log */
-  #log { background: var(--panel); border: 1px solid var(--line); height: 600px; overflow-y: auto; padding: 6px 0; scroll-behavior: smooth; }
-  .ln { display: grid; grid-template-columns: 70px 150px 110px 1fr 180px; gap: 10px; padding: 1px 12px; animation: in .5s; }
+  #log { background: var(--panel); border: 1px solid var(--line); height: 600px; overflow-y: auto; padding: 0 0 6px; scroll-behavior: smooth; }
+  .ln { display: grid; grid-template-columns: 70px 150px 110px 1fr; gap: 10px; padding: 1px 12px; animation: in .5s; }
   .ln span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ln span:last-child { text-align: right; }
+  .ln.head { position: sticky; top: 0; z-index: 1; background: var(--panel); color: var(--dim); border-bottom: 1px solid var(--line); padding: 4px 12px; margin-bottom: 4px; animation: none; }
   .ln.err { color: var(--red); } .ln.warn { color: var(--amber); }
   .ln span:nth-child(4) { position: relative; }
   button { font: inherit; font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line); padding: 0 8px; cursor: pointer; }
@@ -152,14 +152,14 @@
   footer code { color: var(--lime); } footer b { color: var(--text); font-weight: 500; }
   [style*="--m:"] { --c: var(--m); }  /* --m is the model's colour, set inline; rules such as FAIL can still override --c */
   @media (max-width: 1000px) {
-    .ln { grid-template-columns: 64px 100px 70px 1fr auto; }
+    .ln { grid-template-columns: 64px 100px 70px 1fr; }
     .row { grid-template-columns: 1fr; } .asks { flex-direction: row; padding: 8px 0; } .asks i { flex: 1; }
   }
   @media (max-width: 720px) {
     body { padding: 16px 16px 80px; } header { flex-direction: column; align-items: start; } .controls { align-items: start; width: 100%; } .controls > div:first-child { justify-content: start; }
     #picker, #pickBtn { width: 100%; } #pickBtn { text-align: right; } #pickPanel { left: 0; } h1 { font-size: 32px; }
     .bar { grid-template-columns: 1fr 100px; } .bar .track { grid-column: 1 / -1; } .cstats { grid-template-columns: 1fr 1fr; }
-    .ln { grid-template-columns: auto auto 1fr; gap: 0 10px; padding: 3px 12px; } .ln span:nth-child(4) { grid-column: 1 / -1; } .ln span:last-child { display: none; }
+    .ln { grid-template-columns: auto auto 1fr; gap: 0 10px; padding: 3px 12px; } .ln span:nth-child(4) { grid-column: 1 / -1; } .ln.head { display: none; }
     select { max-width: 100%; } .costrow { grid-template-columns: 1fr auto; } footer { flex-direction: column; gap: 2px; padding: 6px 16px; }
   }
 </style>
@@ -227,7 +227,7 @@
 </div>
 
 <h2>Session log <span id="logCwd"></span></h2>
-<div id="log"><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
+<div id="log"><div class="ln head" id="logHead"><span>time</span><span>agent</span><span>event</span><span>detail</span></div><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
 <dialog id="full"><div class="top"><span id="fullHead"></span><form method="dialog"><button type="button" id="fullRaw">raw</button><button>close</button></form></div><pre id="fullText"></pre><div class="md" id="fullMd"></div></dialog>
 
 <footer><span id="cmd"></span><span id="effortSummary"></span></footer>
@@ -494,12 +494,12 @@ function appendLog(rows) {
     const el = document.createElement('div');
     el.className = 'ln' + (r.err ? ' err' : r.action === 'cache' ? ' warn' : '');
     paint(el, r.model);
-    el.title = r.ts;
-    el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span><span class="dim">${esc(r.note)}</span>`;
+    el.title = r.note ? `${r.ts} · ${r.note}` : r.ts;
+    el.innerHTML = `<span class="dim">${time(r.ts)}</span><span class="model">${esc(r.agent)}</span><span>${esc(r.action)}</span><span class="dim">${esc(r.detail)}</span>`;
     el.row = r;
     log.insertBefore(el, $('cursor'));
   }
-  while (log.children.length > 600) log.firstChild.remove();
+  while (log.children.length > 601) $('logHead').nextSibling.remove();
   if (rows.length && stick) log.scrollTop = log.scrollHeight;
 }
 
@@ -572,7 +572,7 @@ function reset() {
   state = createState();
   queue = []; metaStash = {}; replaying = false; lastRecord = 0; lastDay = ''; stick = true;
   $('main').innerHTML = $('subs').innerHTML = '';
-  [...log.children].forEach(el => el.id !== 'cursor' && el.remove());
+  [...log.children].forEach(el => el.id !== 'cursor' && el.id !== 'logHead' && el.remove());
   ['advCalls', 'ratio'].forEach(id => $(id).textContent = '');
 }
 
