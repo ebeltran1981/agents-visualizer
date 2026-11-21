@@ -230,7 +230,7 @@
 <div id="log"><div class="ln head" id="logHead"><span>time</span><span>agent</span><span>event</span><span>detail</span></div><div class="ln" id="cursor" hidden><span></span><b>▌</b></div></div>
 <dialog id="full"><div class="top"><span id="fullHead"></span><form method="dialog"><button type="button" id="fullRaw">raw</button><button>close</button></form></div><pre id="fullText"></pre><div class="md" id="fullMd"></div></dialog>
 
-<footer><span id="cmd"></span><span id="effortSummary"></span></footer>
+<footer><span id="cmd" title="reconstructed from the transcript"></span><span id="effortSummary"></span></footer>
 
 <script type="module">
 import { createState, ingest, ingestMeta, summary, cacheSummary, hitRate, stateOf, reviewing, verb, label, family, shortModel, priceFor, setLocalPrices, colorOf, EFFORT, cost, agentCost, readTokens } from './aggregate.js';
@@ -253,6 +253,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`
 const cssVar = (name, el = document.documentElement) => getComputedStyle(el).getPropertyValue(name).trim();
 const setText = (el, v) => { if (el.textContent !== v) el.textContent = v; };
 const setHTML = (el, v) => { if (el._html !== v) el.innerHTML = el._html = v; };
+const setHidden = (el, v) => { if (el.hidden !== v) el.hidden = v; };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
 const basename = p => p?.split('/').filter(Boolean).pop() ?? '';
 const rate = m => { if (!m) return ''; const p = priceFor(m); return p ? `$${p.in.toFixed(2)} / $${p.out.toFixed(2)}` : 'price ?'; };
@@ -269,7 +270,7 @@ $('speed').value = String(speed);
 
 // Count from the value on screen to `to` over 600 ms.
 function tween(el, to, fmt) {
-  if (fmt === fmt$) el.title = to == null ? NO_COST : '';
+  if (fmt === fmt$ && el.title !== (to == null ? NO_COST : '')) el.title = to == null ? NO_COST : '';
   if (to == null) return setText(el, fmt(to));
   if (el._to === to) return;
   el._to = to;
@@ -323,7 +324,7 @@ function updateCard(parent, a, now) {
   const fresh = !el;
   if (fresh) parent.append(el = makeCard(a.id));
   const k = el.k, st = stateOf(a, now), [sym, v] = verb(a);
-  el.className = 'card';
+  if (el.className !== 'card') el.className = 'card';
   paint(el, a.model);
   setText(k.model, a.model ? shortModel(a.model) : 'starting…');
   setText(k.label, a.id === 'main' ? 'main session' : label(a).replace('#', ' #'));
@@ -371,7 +372,8 @@ function render() {
   if (s.main) updateCard($('main'), s.main, now);
   const adv = s.advModel, c = state.checks, lc = state.lastCheck, call = state.adv, rev = reviewing(state, now);
   $('advisor').style.setProperty('--m', colorOf(adv) || '#cfd4c8');  // grey while there is no advisor
-  $('advisor').dataset.state = rev ? 'working' : 'idle';
+  const advData = rev ? 'working' : 'idle';
+  if ($('advisor').dataset.state !== advData) $('advisor').dataset.state = advData;
   setText($('advModel'), adv ? shortModel(adv) : 'no advisor');
   setText($('advPrice'), !adv ? '' : priceFor(adv) ? rate(adv) : state.adv.paid.total > 0 ? 'reported cost' : rate(adv));
   for (const [id, kind] of [['ckPlan', 'plan'], ['ckRepeat', 'repeat'], ['ckDone', 'done']]) {
@@ -401,7 +403,7 @@ function render() {
     : !s.readSubs.length ? `Nothing to compare: the subagents' input cost is unknown. ${harness.label} doesn't report it, and there is no price for ${noPrice || 'their models'}. Add prices to prices.local.json.`
     : s.readCostIfMain == null ? `The subagents' reading cost ${fmt$(s.readCost)} on their own models. There is nothing to compare it with: the main model, ${shortModel(s.mainModel)}, has no price. Add it to prices.local.json.` : '';
   setText($('savingsNone'), none);
-  $('savingsNone').hidden = !none; $('savingsBody').hidden = !!none;
+  setHidden($('savingsNone'), !none); setHidden($('savingsBody'), !!none);
   setHTML($('readTokens'), none ? '' : `what handing the reading to subagents saved · they read <b>${fmtK(s.readTokens)}</b> tokens${s.unpricedSubs ? ` · ${s.unpricedSubs} left out (no input price)` : ''}`);
   const subModels = [...new Set(s.readSubs.map(a => a.model))];
   setHTML($('mainLabel'), `if ${esc(shortModel(s.mainModel))} had read it<small>${esc(readRate(s.mainModel))}</small>`);
@@ -433,14 +435,13 @@ function render() {
   renderCache(now);
 
   const subFams = [...new Set(s.readSubs.map(a => family(a.model)))].join(' + ');  // the agents readTokens counts
-  $('cmd').innerHTML = s.main ? `${esc(basename(state.cwd))} <code>$ ${esc(harness.bin)} --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '';
-  $('cmd').title = 'reconstructed from the transcript';
+  setHTML($('cmd'), s.main ? `${esc(basename(state.cwd))} <code>$ ${esc(harness.bin)} --model ${esc(family(s.main.model))}${adv ? ` --advisor ${esc(family(adv))}` : ''}</code>` : '');
   const efforts = [...new Set([s.main?.effort, ...s.subs.map(a => a.effort)].filter(Boolean))].join(' / ');
   setHTML($('effortSummary'), s.main ? `effort <b>${esc(efforts)}</b> · subagents <b>${s.subs.length}</b>`
     + (adv ? ` · advisor <b>${esc(family(adv))}</b> [${advState}]` : '')
     + (subFams ? ` · ${esc(subFams)} read <b>${fmtK(s.readTokens)}</b>` : '') : '');
 
-  $('cursor').hidden = !(replaying || Date.now() - lastRecord < 60_000);
+  setHidden($('cursor'), !(replaying || Date.now() - lastRecord < 60_000));
   setText($('progress'), replaying ? `▶ ${speed}x · ${played}/${played + queue.length} events` : '');
 }
 
