@@ -1,7 +1,19 @@
 {
   "name": "agents-visualizer",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "scripts": { "start": "node server.js", "test": "node --test" }
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "app": "electron .",
+    "package": "electron-packager . --icon=electron/icon --out=dist --overwrite --ignore='^/(test|docs|dist|\\.agents|\\.playwright-mcp)'"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.4.1"
+  },
+  "productName": "Agents Visualizer",
+  "main": "electron/main.js"
 }

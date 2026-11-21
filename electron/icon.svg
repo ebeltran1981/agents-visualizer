@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a201b"/>
+      <stop offset="1" stop-color="#0b0d0c"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c221d"/>
+      <stop offset="1" stop-color="#121513"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" stroke="#2c332c" stroke-width="4"/>
+
+  <!-- links: side boxes and diagonal agents to the app box -->
+  <g stroke-width="12" stroke-linecap="round" opacity="0.75">
+    <line x1="512" y1="382" x2="512" y2="275" stroke="#6ad8f3"/>
+    <line x1="642" y1="512" x2="749" y2="512" stroke="#f3c76a"/>
+    <line x1="512" y1="642" x2="512" y2="749" stroke="#f36ad8"/>
+    <line x1="382" y1="512" x2="275" y2="512" stroke="#6ad8f3"/>
+    <g stroke="#b6f36a" stroke-dasharray="2 22">
+      <line x1="392" y1="392" x2="318" y2="318"/>
+      <line x1="632" y1="392" x2="706" y2="318"/>
+      <line x1="392" y1="632" x2="318" y2="706"/>
+      <line x1="632" y1="632" x2="706" y2="706"/>
+    </g>
+  </g>
+
+  <!-- side boxes -->
+  <g stroke-width="12" fill="#121513">
+    <rect x="457" y="160" width="110" height="110" rx="26" stroke="#6ad8f3"/>
+    <rect x="754" y="457" width="110" height="110" rx="26" stroke="#f3c76a"/>
+    <rect x="457" y="754" width="110" height="110" rx="26" stroke="#f36ad8"/>
+    <rect x="160" y="457" width="110" height="110" rx="26" stroke="#6ad8f3"/>
+  </g>
+  <g fill="#d7ded6" opacity="0.5">
+    <rect x="482" y="202" width="60" height="10" rx="5"/><rect x="482" y="222" width="38" height="10" rx="5"/>
+    <rect x="779" y="499" width="60" height="10" rx="5"/><rect x="779" y="519" width="38" height="10" rx="5"/>
+    <rect x="482" y="796" width="60" height="10" rx="5"/><rect x="482" y="816" width="38" height="10" rx="5"/>
+    <rect x="185" y="499" width="60" height="10" rx="5"/><rect x="185" y="519" width="38" height="10" rx="5"/>
+  </g>
+
+  <!-- little agents -->
+  <g>
+    <g transform="translate(290 290)"><circle r="40" fill="#b6f36a"/><circle cx="-14" cy="-4" r="7" fill="#0b0d0c"/><circle cx="14" cy="-4" r="7" fill="#0b0d0c"/><rect x="-3" y="-58" width="6" height="18" rx="3" fill="#b6f36a"/></g>
+    <g transform="translate(734 290)"><circle r="40" fill="#b6f36a"/><circle cx="-14" cy="-4" r="7" fill="#0b0d0c"/><circle cx="14" cy="-4" r="7" fill="#0b0d0c"/><rect x="-3" y="-58" width="6" height="18" rx="3" fill="#b6f36a"/></g>
+    <g transform="translate(290 734)"><circle r="40" fill="#b6f36a"/><circle cx="-14" cy="-4" r="7" fill="#0b0d0c"/><circle cx="14" cy="-4" r="7" fill="#0b0d0c"/><rect x="-3" y="-58" width="6" height="18" rx="3" fill="#b6f36a"/></g>
+    <g transform="translate(734 734)"><circle r="40" fill="#b6f36a"/><circle cx="-14" cy="-4" r="7" fill="#0b0d0c"/><circle cx="14" cy="-4" r="7" fill="#0b0d0c"/><rect x="-3" y="-58" width="6" height="18" rx="3" fill="#b6f36a"/></g>
+  </g>
+
+  <!-- app box -->
+  <rect x="382" y="382" width="260" height="260" rx="52" fill="url(#core)" stroke="#b6f36a" stroke-width="14"/>
+  <line x1="389" y1="440" x2="635" y2="440" stroke="#b6f36a" stroke-width="6" opacity="0.5"/>
+  <circle cx="420" cy="412" r="9" fill="#f36a6a"/>
+  <circle cx="448" cy="412" r="9" fill="#f3c76a"/>
+  <circle cx="476" cy="412" r="9" fill="#b6f36a"/>
+  <g fill="#b6f36a">
+    <rect x="418" y="560" width="34" height="50" rx="8" opacity="0.6"/>
+    <rect x="466" y="520" width="34" height="90" rx="8" opacity="0.8"/>
+    <rect x="514" y="480" width="34" height="130" rx="8"/>
+    <rect x="562" y="535" width="34" height="75" rx="8" opacity="0.7"/>
+  </g>
+</svg>
