@@ -2,3 +2,5 @@ node_modules/
 .remember/
 prices.local.json
 .DS_Store
+.agents/temp
+.agents/worktrees
