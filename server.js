@@ -13,8 +13,8 @@ import codex from './harnesses/codex.js';
 const ALL = [claude, omp, pi, opencode, codex];
 const HARNESSES = Object.fromEntries(ALL.map(h => [h.id, h]));
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PORT = +(process.env.PORT || 4321);
-const LOCAL_PRICES = path.join(HERE, 'prices.local.json');
+let port = +(process.env.PORT || 4321);
+const LOCAL_PRICES = process.env.PRICES_FILE || path.join(HERE, 'prices.local.json');
 const STATIC = { '/': ['index.html', 'text/html'], '/aggregate.js': ['aggregate.js', 'text/javascript'], '/markdown.js': ['markdown.js', 'text/javascript'] };
 
 const arg = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : ''; };
@@ -38,7 +38,7 @@ function stream(req, res, harness, key) {
   req.on('close', stop);
 }
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   const harness = HARNESSES[url.searchParams.get('harness')] ?? startHarness;
   if (STATIC[url.pathname]) {
@@ -63,4 +63,11 @@ http.createServer((req, res) => {
     if (harness.valid(key)) return stream(req, res, harness, key);
   }
   res.writeHead(404).end('not found');
-}).listen(PORT, '127.0.0.1', () => console.log(`agents-visualizer → http://localhost:${PORT}\nharnesses: ${available().map(h => h.label).join(', ')}\nharness: ${startHarness.label}${startSession ? `\nsession: ${startSession}` : ''}`));
+});
+
+// Without an explicit PORT, a taken port moves on to the next one, up to 20 tries.
+server.on('error', e => {
+  if (e.code !== 'EADDRINUSE' || process.env.PORT || port >= 4340) throw e;
+  server.listen(++port, '127.0.0.1');
+});
+server.listen(port, '127.0.0.1', () => console.log(`agents-visualizer → http://localhost:${port}\nharnesses: ${available().map(h => h.label).join(', ')}\nharness: ${startHarness.label}${startSession ? `\nsession: ${startSession}` : ''}`));
