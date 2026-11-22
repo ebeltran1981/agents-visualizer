@@ -607,13 +607,28 @@ let harness, sessions = [];
 // Replay by default when the transcript has been quiet for 60 s.
 const quiet = key => Date.now() - (sessions.find(s => s.key === key)?.mtime ?? Date.now()) > 60_000;
 
+async function loadSessions() {
+  const r = await (await fetch(`/api/sessions?harness=${harness.id}`)).json();
+  sessions = r.sessions;
+  picker.items = sessions.map(s => ({ key: s.key, text: `${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` }));
+  return r;
+}
+
+// Sessions started after the page loaded: pick one up if none was shown, else just refresh the list.
+async function refreshSessions() {
+  if (!harness) return;
+  if (!picker.value) return pickHarness(harness.id);
+  await loadSessions();
+  if (!sessions.some(s => s.key === picker.value)) picker.items.unshift({ key: picker.value, text: picker.value });
+  if (!pickPanel.hidden) listSessions();
+}
+addEventListener('focus', refreshSessions);
+
 async function pickHarness(id, session) {
   harness = harnesses.find(h => h.id === id) ?? harnesses.find(h => h.id === defHarness);
   harnessPicker.value = harness.id;
   setText($('kicker'), `${harness.label} · session`);
-  const r = await (await fetch(`/api/sessions?harness=${harness.id}`)).json();
-  sessions = r.sessions;
-  picker.items = sessions.map(s => ({ key: s.key, text: `${s.cwd} · ${s.id.slice(0, 8)} · ${new Date(s.mtime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` }));
+  const r = await loadSessions();
   const chosen = session || r.default;
   if (!chosen) {
     reset();
@@ -655,6 +670,7 @@ $('pickBtn').onclick = () => {
   if (!pickPanel.hidden) return closePicker();
   pickPanel.hidden = false; pickFilter.value = ''; listSessions(); pickFilter.focus();
   pickList.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
+  refreshSessions();
 };
 pickFilter.oninput = listSessions;
 pickFilter.onkeydown = e => {
