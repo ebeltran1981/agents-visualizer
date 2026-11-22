@@ -21,9 +21,9 @@ It only reads the session files each harness already writes, and never writes in
 agents-visualizer collects nothing and stores nothing. Everything the dashboard shows is read from the session files your harnesses already keep on this computer, at the moment it is shown.
 
 - **Read-only.** It opens session files, and opencode's and codex's databases, for reading only. It never writes to them or to any other file.
-- **Nothing stored.** It has no database, cache or log file of its own, and the page uses no cookies or browser storage. What you see lives in the page's memory and is gone when you close the tab. The one trace is your browser history, which keeps the page URL with the harness and session path.
+- **Nothing stored.** It has no database, cache or log file of its own, and the page uses no cookies or browser storage. What you see lives in the page's memory and is gone when you close the tab. The one trace is your browser history, which keeps the page URL with the harness and session path. The desktop app has no browser history, but Electron keeps Chromium's usual profile folder ([its data folder](#desktop-app)) with its web cache.
 - **Nothing sent.** The server listens only on `127.0.0.1`, so other computers can't reach it. Neither the server nor the page contacts any outside service: no telemetry, analytics, CDN or web fonts.
-- **No dependencies.** It runs on Node's standard library alone, so there is no third-party code that could do otherwise.
+- **No dependencies in the web version.** `node server.js` runs on Node's standard library alone, so there is no third-party code that could do otherwise. The [desktop app](#desktop-app) is the same server and page inside Electron, which adds Chromium and is the app's one dependency.
 
 This covers agents-visualizer only. The harnesses themselves send your prompts to their model providers, under those providers' terms.
 
@@ -45,7 +45,7 @@ Start the server, then open http://localhost:4321.
 node server.js                       # opens the most recently modified session
 node server.js --harness omp         # starts on another harness: claude (default), omp, pi, opencode or codex
 node server.js --session <id|path>   # opens a specific session
-PORT=5000 node server.js             # uses another port
+PORT=5000 node server.js             # uses another port (without PORT, a taken 4321 moves on to 4322 and up)
 CLAUDE_CONFIG_DIR=/path/to/config node server.js   # if Claude Code's config isn't in ~/.claude
 ```
 
@@ -67,6 +67,28 @@ What the dashboard shows:
 | The cache | Hit rate, money the cache saved, cache breaks and what rebuilding cost, subagent warm-up, a sparkline of the main agent's cached prefix, and a countdown to when its cache expires (or, once it has, what the next turn will cost to rewrite). Each agent card shows its own hit rate. |
 | Session log | Every tool call, message, error and advisor call, with timestamps and day dividers. Hover a row whose text is cut off and click **full** to read the whole message. Messages render as Markdown (**raw** shows the original text); tool inputs and errors stay exactly as typed. |
 | Footer | The reconstructed command line, the effort levels, the subagent count and the advisor's state. |
+
+### Desktop app
+
+The same dashboard also comes as an Electron app with its own window, so you don't need a browser tab or Node installed. It runs the server inside the app on a free local port, so it never clashes with a `node server.js` you have running. Opening it again brings back the open window, and it remembers the window's size and position.
+
+Download the file for your system from [Releases](https://github.com/ebeltran1981/agents-visualizer/releases): a `.dmg` for macOS (`arm64` for Apple silicon, `x64` for Intel), a setup or portable `.exe` for Windows, or an `.AppImage` for Linux. The builds are not signed, so each system asks once before the first launch:
+
+- **macOS** says the app is damaged or from an unidentified developer. After copying it to Applications, run `xattr -dr com.apple.quarantine "/Applications/Agents Visualizer.app"`.
+- **Windows** SmartScreen says it protected your PC. Click **More info**, then **Run anyway**.
+- **Linux** needs the file made executable: `chmod +x agents-visualizer-*.AppImage`.
+
+Your own prices go in `prices.local.json` in the app's data folder: `~/Library/Application Support/Agents Visualizer/` on macOS, `%APPDATA%\Agents Visualizer\` on Windows, `~/.config/Agents Visualizer/` on Linux. Electron keeps its web cache in the same folder.
+
+Building it yourself is the one step that installs third-party code:
+
+```sh
+npm install          # installs Electron and electron-builder (dev dependencies only)
+npm run app          # runs it from source
+npm run dist         # builds this system's installer into dist/
+```
+
+Pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`) builds all three systems on GitHub Actions and attaches the files to a release for that tag.
 
 ## Getting a multi-model session
 
@@ -109,7 +131,7 @@ The two numbers are the session cost and what it would cost if every agent ran o
 
 Costs come from the `PRICES` table at the top of `aggregate.js`: Anthropic list prices in USD per 1M tokens (input, output, cache read, 5-minute cache write).
 
-For your own rates or other models, copy `prices.local.example.json` to `prices.local.json` next to `server.js`. Git ignores that file, so company rates never reach the repo. Entries there take precedence over `PRICES`, and the dashboard and the status line both read it. Reload the page after editing it.
+For your own rates or other models, copy `prices.local.example.json` to `prices.local.json` next to `server.js` (for the desktop app, into its [data folder](#desktop-app)). Git ignores that file, so company rates never reach the repo. Entries there take precedence over `PRICES`, and the dashboard and the status line both read it. Reload the page after editing it.
 
 The example below uses placeholder rates; replace them with yours.
 
@@ -147,6 +169,8 @@ The dashboard reads the transcripts Claude Code writes on your computer, so it w
 | `harnesses/*.js` | One adapter per harness: lists its sessions and turns its files into the shared record format. |
 | `aggregate.js` | Harness-agnostic aggregation and the price table. The browser and `statusline.js` both use it. |
 | `markdown.js` | A small Markdown renderer for messages in the full-message view, with no dependencies. It escapes all HTML first, so a transcript can't inject markup. |
+| `electron/` | The desktop app: `main.js` starts the server and opens it in a window; `icon.svg` is the app icon, with `icon.png` and `icon.icns` made from it. |
+| `.github/workflows/release.yml` | Builds the desktop app on macOS, Windows and Linux when a version tag is pushed, and attaches the files to a GitHub Release. |
 | `prices.local.example.json` | Template for your own rates and model names; copy it to `prices.local.json`. |
 | `index.html` | The dashboard, written in vanilla JS and CSS. |
 | `statusline.js` | The one-line status line. |

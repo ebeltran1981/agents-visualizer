@@ -4,3 +4,4 @@ prices.local.json
 .DS_Store
 .agents/temp
 .agents/worktrees
+dist/
